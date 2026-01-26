@@ -1,0 +1,7 @@
+[package]
+name = "manual_tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+stat_diary_tools = { version = "0.1.0", path = "../stat_diary_tools" }
