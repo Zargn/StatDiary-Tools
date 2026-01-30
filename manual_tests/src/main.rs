@@ -15,6 +15,12 @@ fn main() {
     println!("Exit code: {rc}");
     */
 
+    if let Err(e) = stat_diary_tools::temporary_update_database("data_base") {
+        println!("{}", e);
+    }
+}
+
+fn transform_file_test() {
     let mut tags = HashMap::new();
     if let Err(e) = stat_diary_tools::transform_data_file("21-Wednesday.txt", &mut tags) {
         println!("transform error: {}", e);

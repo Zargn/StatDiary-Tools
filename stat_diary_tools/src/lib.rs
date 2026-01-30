@@ -56,6 +56,19 @@ Caches are to be saved in the following locations:
 All daily averages for each month should be saved in a month_cache.txt file inside that months folder.
 All months averages for each year should be saved in a year_cache.txt file inside that years folder.
 
+Cache format:
+First byte:
+Average mental score for this period.
+Second byte:
+Average physical score for this period.
+Remaining bytes:
+Every two bytes represent a u16 tag id.
+
+??? Should be add a third byte for a user-defined score? ???
+Doesn't need to actually contain anything yet, but we could reserve the third byte for it
+just like we do for the mental and physical score.
+Although if we want to add that in the future it shouldn't be very difficult to modify this function
+at that time instead. Since it is made to regenerate all the caches, meaning the old gets deleted.
 
 */
 fn regenerate_caches(db_path: &str) -> i32 {
@@ -118,13 +131,35 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path: *const c_char) -> i32 
     todo!();
 }
 
-fn temporary_update_database(db_path: &str) {
-    let tags: HashMap<String, u16> = HashMap::new();
+pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
+    let mut tags: HashMap<String, u16> = HashMap::new();
 
     // Iterate through data_base/data/
     // Call transform_data_file on each of them.
 
-    todo!();
+    for path in WalkDir::new(format!("{}/data", db_path)) {
+        let path = path?;
+        let path = path.path();
+        if path.is_file() {
+            println!("{:?}", path);
+            transform_data_file(path.to_str().unwrap(), &mut tags)?;
+        }
+    }
+
+    let Ok(tags_file) = File::create(format!("{}/tags.txt", db_path)) else {
+        // Could not create a new file! It might already exist, or there is some other issue.
+        return Err("Could not create a new file!".into());
+    };
+
+    let mut tags_writer = BufWriter::new(tags_file);
+
+    for (k, v) in tags {
+        writeln!(tags_writer, "{} {}", v, k)?;
+    }
+
+    tags_writer.flush()?;
+
+    Ok(())
 }
 
 pub fn read_lines<P>(path: P) -> io::Result<impl Iterator<Item = String>>
@@ -187,7 +222,9 @@ pub fn transform_data_file(
         )
     };
 
-    let Ok(result_file) = File::create(format!("{}-{}", day_of_month, day_of_week)) else {
+    let path = Path::new(file_path).parent().unwrap().to_str().unwrap();
+
+    let Ok(result_file) = File::create(format!("{}/{}-{}", path, day_of_month, day_of_week)) else {
         // Could not create a new file! It might already exist, or there is some other issue.
         return Err("Could not create a new file!".into());
     };
@@ -220,6 +257,7 @@ pub fn transform_data_file(
     }
 
     result_writer.flush()?;
+    std::fs::remove_file(file_path)?;
 
     Ok(())
 }
@@ -257,6 +295,7 @@ pub fn temp_read_data_file(
             }
         }
     }
+    println!();
 
     Ok(())
 }
