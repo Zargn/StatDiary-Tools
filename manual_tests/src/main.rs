@@ -15,9 +15,15 @@ fn main() {
     println!("Exit code: {rc}");
     */
 
-    if let Err(e) = stat_diary_tools::temporary_update_database("data_base") {
+    /*if let Err(e) = stat_diary_tools::temporary_update_database("data_base") {
         println!("{}", e);
-    }
+    } // */
+    let path = "data_base/";
+    let c_path = CString::new(path).unwrap();
+
+    let rc = unsafe { stat_diary_tools::RegenerateCaches(c_path.as_ptr()) };
+
+    println!("Exit code: {rc}");
 }
 
 fn transform_file_test() {
@@ -31,7 +37,8 @@ fn transform_file_test() {
     for (key, value) in tags.iter() {
         tags_list.insert(*value, key.clone());
     }
+    /*
     if let Err(e) = stat_diary_tools::temp_read_data_file("21-2", &tags_list) {
         println!("read error: {}", e);
-    }
+    } */
 }

@@ -1,13 +1,20 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     error::Error,
     ffi::{c_char, CStr},
-    fmt::Display,
-    fs::File,
+    fmt::{format, Display},
+    fs::{self, File},
     io::{self, BufRead, BufWriter, Read, Write},
     path::Path,
 };
 use walkdir::WalkDir;
+
+use crate::data_entry::DataEntry;
+mod data_entry;
+
+//
+
+//
 
 #[no_mangle]
 pub unsafe extern "C" fn CompressDBToImage(
@@ -25,6 +32,10 @@ pub unsafe extern "C" fn CompressDBToImage(
     1
 }
 
+//
+
+//
+
 fn compress_db_to_image(db_path: &str, result_path: &str) -> Result<(), Box<dyn Error>> {
     println!("Using path: {}", db_path);
 
@@ -38,10 +49,25 @@ fn compress_db_to_image(db_path: &str, result_path: &str) -> Result<(), Box<dyn 
     Ok(())
 }
 
+//
+
+//
+
 #[no_mangle]
 pub unsafe extern "C" fn RegenerateCaches(db_path: *const c_char) -> i32 {
-    todo!();
+    if db_path.is_null() {
+        return -1;
+    }
+    let db_path = unsafe { CStr::from_ptr(db_path).to_string_lossy() };
+
+    regenerate_caches(&db_path);
+
+    1
 }
+
+//
+
+//
 
 /*
 
@@ -64,7 +90,7 @@ Average physical score for this period.
 Remaining bytes:
 Every two bytes represent a u16 tag id.
 
-??? Should be add a third byte for a user-defined score? ???
+??? Should we add a third byte for a user-defined score? ???
 Doesn't need to actually contain anything yet, but we could reserve the third byte for it
 just like we do for the mental and physical score.
 Although if we want to add that in the future it shouldn't be very difficult to modify this function
@@ -72,8 +98,187 @@ at that time instead. Since it is made to regenerate all the caches, meaning the
 
 */
 fn regenerate_caches(db_path: &str) -> i32 {
-    todo!();
+    let data_path_str = format!("{}data/2026", db_path);
+    let data_path = Path::new(&data_path_str);
+
+    println!("Data_path: {}", data_path.to_str().unwrap());
+
+    let mut files = fs::read_dir(data_path)
+        .unwrap()
+        .map(|res| res.map(|e| e.path()))
+        .collect::<Result<Vec<_>, io::Error>>()
+        .unwrap();
+    files.sort();
+
+    let Ok(result_file) = File::create(format!("{}/year_cache.txt", data_path_str)) else {
+        // Could not create a new file! It might already exist, or there is some other issue.
+        return 0;
+    };
+
+    let mut result_writer = BufWriter::new(result_file);
+
+    for entry in files {
+        if entry.is_file() {
+            println!("Found unexpected file {}", entry.to_str().unwrap());
+            continue;
+        }
+        //let entry = entry.unwrap();
+
+        println!("Folder found! Path: {}", entry.to_str().unwrap());
+        let Ok(avg_scores) = create_month_cache(&entry) else {
+            continue;
+        };
+
+        println!(
+            "Month avg:\nMental_score: {}\nPhysical_Score: {}",
+            avg_scores.avg_mental, avg_scores.avg_physical
+        );
+
+        write!(
+            result_writer,
+            "{} | {}\n",
+            entry.file_name().unwrap().to_str().unwrap(),
+            avg_scores.to_data_str(),
+        );
+    }
+
+    result_writer.flush();
+
+    0
 }
+
+fn create_month_cache(month_path: &Path) -> Result<ScoreAverages, Box<dyn Error>> {
+    let mut files = fs::read_dir(month_path)?
+        .map(|res| res.map(|e| e.path()))
+        .collect::<Result<Vec<_>, io::Error>>()?;
+    files.sort();
+
+    println!("mp: {}", month_path.to_str().unwrap());
+    let Ok(mut result_file) =
+        File::create(format!("{}/month_cache.txt", month_path.to_str().unwrap()))
+    else {
+        // Could not create a new file! It might already exist, or there is some other issue.
+        return Err("Could not create a new file!".into());
+    };
+
+    let mut result_writer = BufWriter::new(result_file);
+
+    let mut month_count = 0;
+    let mut month_m_score_sum = 0.0;
+    let mut month_p_score_sum = 0.0;
+
+    for file in files {
+        let data_entries = get_entries_from_file(&file)?;
+        let entry_count = data_entries.len();
+
+        let mut min_mental_score: u8 = 100;
+        let mut max_mental_score: u8 = 0;
+
+        let mut min_physical_score: u8 = 100;
+        let mut max_physical_score: u8 = 0;
+
+        let mut m_score_sum: f32 = 0.0;
+        let mut p_score_sum: f32 = 0.0;
+        let mut tags = HashSet::new();
+        for data_entry in data_entries {
+            m_score_sum += data_entry.mental_score as f32;
+            p_score_sum += data_entry.physical_score as f32;
+
+            min_mental_score = min_mental_score.min(data_entry.mental_score);
+            max_mental_score = max_mental_score.max(data_entry.mental_score);
+            min_physical_score = min_physical_score.min(data_entry.physical_score);
+            max_physical_score = max_physical_score.max(data_entry.physical_score);
+
+            for tag in data_entry.tags {
+                tags.insert(tag);
+            }
+        }
+
+        let overview = Overview {
+            min_mental_score,
+            max_mental_score,
+            avg_mental_score: m_score_sum / entry_count as f32,
+            min_physical_score,
+            max_physical_score,
+            avg_physical_score: p_score_sum / entry_count as f32,
+            tags: Vec::from_iter(tags),
+        };
+
+        month_m_score_sum += overview.avg_mental_score;
+        month_p_score_sum += overview.avg_physical_score;
+        month_count += 1;
+
+        write!(
+            result_writer,
+            "{} | {}\n",
+            file.file_name().unwrap().to_str().unwrap(),
+            overview.to_data_str(),
+        );
+        println!(
+            "Overview: \n{} | {}\n",
+            file.file_name().unwrap().to_str().unwrap(),
+            overview.to_data_str()
+        );
+    }
+
+    result_writer.flush();
+
+    /*
+    println!(
+        "Month avg:\nMental_score: {}\nPhysical_Score: {}",
+        month_m_score_sum / month_count as f32,
+        month_p_score_sum / month_count as f32
+    );*/
+
+    Ok(ScoreAverages {
+        avg_mental: month_m_score_sum / month_count as f32,
+        avg_physical: month_p_score_sum / month_count as f32,
+    })
+}
+
+#[derive(Debug)]
+struct Overview {
+    min_mental_score: u8,
+    max_mental_score: u8,
+    avg_mental_score: f32,
+    min_physical_score: u8,
+    max_physical_score: u8,
+    avg_physical_score: f32,
+    tags: Vec<u16>,
+}
+
+impl Overview {
+    fn to_data_str(&self) -> String {
+        let mut data_str = format!(
+            "{} {} {} | {} {} {} |",
+            self.min_mental_score,
+            self.max_mental_score,
+            self.avg_mental_score,
+            self.min_physical_score,
+            self.max_physical_score,
+            self.avg_physical_score
+        );
+        for tag in &self.tags {
+            data_str.push_str(&format!(" {}", tag));
+        }
+        data_str
+    }
+}
+
+struct ScoreAverages {
+    avg_mental: f32,
+    avg_physical: f32,
+}
+
+impl ScoreAverages {
+    fn to_data_str(&self) -> String {
+        format!("{} | {}", self.avg_mental, self.avg_physical)
+    }
+}
+
+//
+
+//
 
 /*
 When merging two tags check the general averages and make sure to merge the less used tag
@@ -87,6 +292,10 @@ pub unsafe extern "C" fn MergeTags(db_path: *const c_char) -> i32 {
     todo!();
 }
 
+//
+
+//
+
 /*
 Fairly simple function. Only needs to edit the tags document.
 */
@@ -94,6 +303,10 @@ Fairly simple function. Only needs to edit the tags document.
 pub unsafe extern "C" fn RenameTag(db_path: *const c_char) -> i32 {
     todo!();
 }
+
+//
+
+//
 
 /*
 This function is meant to eventually be used to update any old database to use a newer format.
@@ -131,6 +344,10 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path: *const c_char) -> i32 
     todo!();
 }
 
+//
+
+//
+
 pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
     let mut tags: HashMap<String, u16> = HashMap::new();
 
@@ -162,6 +379,10 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+//
+
+//
+
 pub fn read_lines<P>(path: P) -> io::Result<impl Iterator<Item = String>>
 where
     P: AsRef<Path>,
@@ -170,6 +391,10 @@ where
         .lines()
         .map_while(Result::ok))
 }
+
+//
+
+//
 
 pub fn transform_data_file(
     file_path: &str,
@@ -262,10 +487,12 @@ pub fn transform_data_file(
     Ok(())
 }
 
-pub fn temp_read_data_file(
-    file_path: &str,
-    tags: &HashMap<u16, String>,
-) -> Result<(), Box<dyn Error>> {
+//
+
+//
+
+/// Reads all entries in the provided file and returns a list of assembled DataEntry structs
+pub fn get_entries_from_file(file_path: &Path) -> Result<Vec<DataEntry>, Box<dyn Error>> {
     let bytes: Vec<u8> = io::BufReader::new(File::open(file_path)?)
         .bytes()
         .map_while(Result::ok)
@@ -273,32 +500,56 @@ pub fn temp_read_data_file(
 
     let mut i = 0;
 
+    let mut data_entries = Vec::new();
+
     while i < bytes.len() {
         let hour = bytes[i];
-        let m_score = bytes[i + 1];
-        let p_score = bytes[i + 2];
-        print!("\n {}:00 | {} | {} | ", hour, m_score, p_score);
+        let mental_score = bytes[i + 1];
+        let physical_score = bytes[i + 2];
 
+        let mut tags = Vec::new();
         i += 3;
         loop {
-            let id = ((bytes[i] as u16) << 8) | bytes[i + 1] as u16;
-            if id == u16::MAX {
+            let tag_id = ((bytes[i] as u16) << 8) | bytes[i + 1] as u16;
+            if tag_id == u16::MAX {
                 i += 2;
                 break;
             }
             i += 2;
 
-            if let Some(tag) = tags.get(&id) {
-                print!("{} ", tag);
-            } else {
-                print!("UNKNOWN_ID ");
-            }
+            tags.push(tag_id);
+        }
+
+        let data_entry = DataEntry::new(hour, mental_score, physical_score, tags);
+        data_entries.push(data_entry);
+    }
+
+    Ok(data_entries)
+}
+
+//
+
+//
+
+/// Prints the provided data entry
+pub fn temp_display_entry(entry: DataEntry, tags: &HashMap<u16, String>) {
+    print!(
+        "\n {}:00 | {} | {} | ",
+        entry.hour, entry.mental_score, entry.physical_score
+    );
+    for tag_id in entry.tags {
+        if let Some(tag) = tags.get(&tag_id) {
+            print!("{} ", tag);
+        } else {
+            print!("UNKNOWN_ID ");
         }
     }
     println!();
-
-    Ok(())
 }
+
+//
+
+//
 
 fn parse_and_write(
     data_str: &str,
@@ -308,6 +559,10 @@ fn parse_and_write(
     writer.write_all(&[data_str.split(split).next().unwrap().parse::<u8>()?])?;
     Ok(())
 }
+
+//
+
+//
 
 fn day_of_week(day_name: &str) -> u8 {
     match day_name {
@@ -321,6 +576,10 @@ fn day_of_week(day_name: &str) -> u8 {
         _ => u8::MAX,
     }
 }
+
+//
+
+//
 
 #[cfg(test)]
 mod tests {
