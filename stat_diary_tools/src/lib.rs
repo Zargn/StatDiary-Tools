@@ -8,9 +8,12 @@ use std::{
     path::{Path, PathBuf},
 };
 use walkdir::WalkDir;
+use zip::unstable::write;
 
-use crate::data_entry::DataEntry;
+use crate::{cache_handling::regenerate_caches, data_entry::DataEntry};
+mod cache_handling;
 mod data_entry;
+mod db_status;
 
 const DATAFILEEXTENSION: &str = "statdiary";
 
@@ -113,31 +116,14 @@ month_cache:
 
 */
 
-#[derive(Debug)]
-enum RegenCachesError {
-    InvalidRoot,
+pub enum DBError {
     IoError(io::Error),
-    InvalidMonthFolder,
-    FoundUnknownFile(PathBuf),
-    FoundUnknownFolder(PathBuf),
+    CorruptedTagsFile(String),
 }
 
-impl RegenCachesError {
-    fn into_code(self) -> i32 {
-        match self {
-            Self::InvalidRoot => 1,
-            Self::IoError(_) => 2,
-            Self::InvalidMonthFolder => 3,
-            Self::FoundUnknownFile(_) => 4,
-            Self::FoundUnknownFolder(_) => 5,
-        }
-    }
-}
-
-impl From<io::Error> for RegenCachesError {
-    fn from(io_err: io::Error) -> Self {
-        println!("io_err: {}", io_err);
-        Self::IoError(io_err)
+impl From<io::Error> for DBError {
+    fn from(err: io::Error) -> Self {
+        Self::IoError(err)
     }
 }
 
@@ -145,48 +131,36 @@ impl From<io::Error> for RegenCachesError {
 
 //
 
-/// Regenerates all caches in the provided database.
-fn regenerate_caches(db_path: &Path) -> Result<(), RegenCachesError> {
-    if !db_path.exists() {
-        return Err(RegenCachesError::InvalidRoot);
-    }
+/// Returns a hashmap representing all the tag ids and tag strings that are available in the
+/// provided database.
+///
+/// Will return a DBError::CorruptedTagsFile if any fault is found with the tags file, and a
+/// DBError::IoError if the tags file is missing.
+fn get_tag_map(db_path: &Path) -> Result<HashMap<u16, String>, DBError> {
+    let filepath = db_path.join("tags.txt");
 
-    let data_path = Path::new(db_path).join("data");
+    let mut tags = HashMap::new();
+    for line in read_lines(filepath)? {
+        let mut parts = line.split(' ');
+        let (id, tag) = (
+            parts
+                .next()
+                .ok_or(DBError::CorruptedTagsFile(line.clone()))?
+                .parse::<u16>()
+                .map_err(|_| DBError::CorruptedTagsFile(line.clone()))?,
+            parts
+                .next()
+                .ok_or(DBError::CorruptedTagsFile(line.clone()))?,
+        );
 
-    for year_folder in read_sorted_directory(&data_path)? {
-        let mut result_writer = BufWriter::new(File::create(year_folder.join("year_cache.txt"))?);
-        for month_folder in read_sorted_directory(&year_folder)? {
-            if month_folder.is_file() {
-                if month_folder != year_folder.join("year_cache.txt") {
-                    return Err(RegenCachesError::FoundUnknownFile(month_folder));
-                }
-                continue;
-            }
-
-            let Ok(folder_id) = month_folder
-                .file_name()
-                .ok_or(RegenCachesError::InvalidMonthFolder)?
-                .to_string_lossy()
-                .parse::<u8>()
-            else {
-                return Err(RegenCachesError::FoundUnknownFolder(month_folder));
-            };
-            if !(1..=12).contains(&folder_id) {
-                return Err(RegenCachesError::FoundUnknownFolder(month_folder));
-            }
-
-            let avg_month_scores = create_month_cache(&month_folder)?;
-            writeln!(
-                result_writer,
-                "{:?} | {}",
-                folder_id,
-                avg_month_scores.to_data_str(),
-            )?;
+        if tags.insert(id, tag.to_string()).is_some() {
+            return Err(DBError::CorruptedTagsFile(
+                "Duplicate tag ids found in tags file!".to_string(),
+            ));
         }
-        result_writer.flush()?;
+        todo!();
     }
-
-    Ok(())
+    Ok(tags)
 }
 
 //
@@ -200,110 +174,6 @@ fn read_sorted_directory(directory_path: &Path) -> Result<Vec<PathBuf>, io::Erro
         .collect::<Result<Vec<_>, io::Error>>()?;
     files.sort();
     Ok(files)
-}
-
-//
-
-//
-
-/// Creates a month cache in the provided month folder. Reads all available day items and saves
-/// min max and avg m/p scores for each day in separate rows in a month_cache.txt file placed
-/// inside the provided month folder.
-///
-/// If a month_cache.txt file already exists then it gets overwritten.
-///
-/// Returns the average m and p score for this month.
-fn create_month_cache(month_folder: &Path) -> Result<ScoreAverages, RegenCachesError> {
-    /*
-    let mut files = fs::read_dir(month_path)?
-        .map(|res| res.map(|e| e.path()))
-        .collect::<Result<Vec<_>, io::Error>>()?;
-    files.sort(); */
-
-    let mut result_writer = BufWriter::new(File::create(month_folder.join("month_cache.txt"))?);
-
-    let mut month_count = 0;
-    let mut month_m_score_sum = 0.0;
-    let mut month_p_score_sum = 0.0;
-
-    for file in read_sorted_directory(month_folder)? {
-        if file.is_dir() {
-            return Err(RegenCachesError::FoundUnknownFolder(file));
-        }
-
-        if file == month_folder.join("month_cache.txt") {
-            continue;
-        }
-
-        if file
-            .extension()
-            .ok_or(RegenCachesError::FoundUnknownFile(file.clone()))?
-            .to_string_lossy()
-            != DATAFILEEXTENSION
-        {
-            return Err(RegenCachesError::FoundUnknownFile(file));
-        }
-
-        let mut overview = Overview::default();
-
-        let data_entries = get_entries_from_file(&file)?;
-        let entry_count = data_entries.len();
-
-        let mut m_score_sum: f32 = 0.0;
-        let mut p_score_sum: f32 = 0.0;
-        let mut tags = HashSet::new();
-        for data in data_entries {
-            m_score_sum += data.mental_score as f32;
-            p_score_sum += data.physical_score as f32;
-
-            overview.min_m_score = overview.min_m_score.min(data.mental_score);
-            overview.max_m_score = overview.max_m_score.max(data.mental_score);
-            overview.min_p_score = overview.min_p_score.min(data.physical_score);
-            overview.max_p_score = overview.max_p_score.max(data.physical_score);
-
-            for tag in data.tags {
-                tags.insert(tag);
-            }
-        }
-
-        overview.avg_m_score = m_score_sum / entry_count as f32;
-        overview.avg_p_score = p_score_sum / entry_count as f32;
-
-        month_m_score_sum += overview.avg_m_score;
-        month_p_score_sum += overview.avg_p_score;
-        month_count += 1;
-
-        let filename = file
-            .file_name()
-            .ok_or(RegenCachesError::FoundUnknownFile(file.clone()))?;
-
-        writeln!(
-            result_writer,
-            "{} | {}",
-            filename.to_string_lossy(),
-            overview.to_data_str(),
-        )?;
-        /*
-        println!(
-            "Overview: \n{} | {}\n",
-            file.file_name().unwrap().to_str().unwrap(),
-            overview.to_data_str()
-        );*/
-    }
-
-    result_writer.flush()?;
-
-    /*
-    println!(
-        "Month avg:\nMental_score: {}\nPhysical_Score: {}",
-        month_m_score_sum / month_count as f32,
-        month_p_score_sum / month_count as f32
-    );*/
-
-    Ok(ScoreAverages {
-        avg_mental: month_m_score_sum / month_count as f32,
-        avg_physical: month_p_score_sum / month_count as f32,
-    })
 }
 
 #[derive(Debug, Default)]
@@ -411,7 +281,21 @@ Make sure to call RegenerateCaches after this to create all the caches in the co
 */
 #[no_mangle]
 pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path: *const c_char) -> i32 {
-    todo!();
+    if db_path.is_null() {
+        return -1;
+    }
+    let db_path = unsafe { CStr::from_ptr(db_path) };
+
+    let Ok(path) = db_path.to_str() else {
+        return -2;
+    };
+
+    if let Err(error) = temporary_update_database(path) {
+        println!("Error occured!\n{:?}", error);
+        //return error.into_code();
+    }
+
+    0
 }
 
 //
@@ -558,66 +442,6 @@ pub fn transform_data_file(
     std::fs::remove_file(file_path)?;
 
     Ok(())
-}
-
-//
-
-//
-
-/// Reads all entries in the provided file and returns a list of assembled DataEntry structs
-pub fn get_entries_from_file(file_path: &Path) -> Result<Vec<DataEntry>, io::Error> {
-    let bytes: Vec<u8> = io::BufReader::new(File::open(file_path)?)
-        .bytes()
-        .map_while(Result::ok)
-        .collect();
-
-    let mut i = 0;
-
-    let mut data_entries = Vec::new();
-
-    while i < bytes.len() {
-        let hour = bytes[i];
-        let mental_score = bytes[i + 1];
-        let physical_score = bytes[i + 2];
-
-        let mut tags = Vec::new();
-        i += 3;
-        loop {
-            let tag_id = ((bytes[i] as u16) << 8) | bytes[i + 1] as u16;
-            if tag_id == u16::MAX {
-                i += 2;
-                break;
-            }
-            i += 2;
-
-            tags.push(tag_id);
-        }
-
-        let data_entry = DataEntry::new(hour, mental_score, physical_score, tags);
-        data_entries.push(data_entry);
-    }
-
-    Ok(data_entries)
-}
-
-//
-
-//
-
-/// Prints the provided data entry
-pub fn temp_display_entry(entry: DataEntry, tags: &HashMap<u16, String>) {
-    print!(
-        "\n {}:00 | {} | {} | ",
-        entry.hour, entry.mental_score, entry.physical_score
-    );
-    for tag_id in entry.tags {
-        if let Some(tag) = tags.get(&tag_id) {
-            print!("{} ", tag);
-        } else {
-            print!("UNKNOWN_ID ");
-        }
-    }
-    println!();
 }
 
 //
