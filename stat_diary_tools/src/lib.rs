@@ -10,7 +10,11 @@ use std::{
 use walkdir::WalkDir;
 use zip::unstable::write;
 
-use crate::{cache_handling::regenerate_caches, data_entry::DataEntry};
+use crate::{
+    cache_handling::{regenerate_caches, RegenCachesError},
+    data_entry::DataEntry,
+    db_status::{ActiveTask, DBStatus, DBStatusError},
+};
 mod cache_handling;
 mod data_entry;
 mod db_status;
@@ -69,10 +73,49 @@ pub unsafe extern "C" fn RegenerateCaches(db_path: *const c_char) -> i32 {
         return -2;
     };
 
+    let db_path = Path::new(path);
+
+    let Ok(db_status) = DBStatus::activate(db_path.to_path_buf(), ActiveTask::RegenerateCaches)
+    else {
+        println!("Database is busy! Aborting...");
+        return -3;
+    };
+
     if let Err(error) = regenerate_caches(Path::new(path)) {
         println!("Error occured!\n{:?}", error);
         return error.into_code();
     }
+
+    //db_status.deactivate();
+
+    0
+}
+
+//
+
+//
+
+#[no_mangle]
+pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
+    if db_path.is_null() {
+        return -1;
+    }
+    let db_path = unsafe { CStr::from_ptr(db_path) };
+
+    let Ok(path) = db_path.to_str() else {
+        return -2;
+    };
+
+    let db_path = Path::new(path);
+    let Err(activate_error) =
+        DBStatus::activate(db_path.to_path_buf(), ActiveTask::RegenerateCaches)
+    else {
+        return 0;
+    };
+
+    let DBStatusError::DataBaseBusy(active_task, db_status) = activate_error else {
+        return -1;
+    };
 
     0
 }
