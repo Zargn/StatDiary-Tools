@@ -91,6 +91,10 @@ impl TagList {
     }
 
     pub fn rename_tag(&mut self, old_tag: String, new_tag: String) -> Result<()> {
+        println!("str-id map: \n{:?}\n\n", self.str_id_map);
+        println!("id-str map: \n{:?}\n\n", self.id_str_map);
+
+        println!("old-tag: {}, new-tag: {}", old_tag, new_tag);
         if self.str_id_map.contains_key(&new_tag) {
             return Err(DBError::TagAlreadyExists);
         }
@@ -111,7 +115,7 @@ impl TagList {
         let mut writer = BufWriter::new(File::create(filepath)?);
 
         for (id, tag) in self.id_str_map.iter() {
-            writeln!(writer, "{}|{}", id, tag)?;
+            writeln!(writer, "{} {}", id, tag)?;
         }
 
         writer.flush()?;
