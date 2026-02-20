@@ -6,15 +6,19 @@ use std::{
 
 use crate::db_status;
 
+#[derive(Debug)]
 pub enum ActiveTask {
     None,
     RegenerateCaches,
+    MergeTags(String, String),
+    RenameTag(String, String),
 }
 
 impl ActiveTask {
     fn parse(data_str: &str) -> Result<ActiveTask> {
         let mut parts = data_str.split('|');
         match parts.next().ok_or(DBStatusError::UnknownTask)? {
+            "0" => Ok(ActiveTask::None),
             "1" => Ok(ActiveTask::RegenerateCaches),
             _ => Err(DBStatusError::UnknownTask),
         }
@@ -25,6 +29,8 @@ impl ActiveTask {
         let task_data = match self {
             Self::None => "",
             Self::RegenerateCaches => "",
+            Self::MergeTags(s1, s2) => &format!("{} {}", s1, s2),
+            Self::RenameTag(s1, s2) => &format!("{} {}", s1, s2),
         };
         format!("{}|{}", task_id, task_data)
     }
@@ -33,10 +39,13 @@ impl ActiveTask {
         match self {
             Self::None => 0,
             Self::RegenerateCaches => 1,
+            Self::MergeTags(_, _) => 2,
+            Self::RenameTag(_, _) => 3,
         }
     }
 }
 
+#[derive(Debug)]
 pub enum DBStatusError {
     InvalidDataBasePath,
     IoError(io::Error),
@@ -54,9 +63,9 @@ type Result<T> = std::result::Result<T, DBStatusError>;
 
 const STATUSFILENAME: &str = ".status.txt";
 
+#[derive(Debug)]
 pub struct DBStatus {
     status_path: PathBuf,
-    active: bool,
 }
 
 impl DBStatus {
@@ -68,11 +77,10 @@ impl DBStatus {
 
         let db_status = DBStatus {
             status_path: filepath.clone(),
-            active: true,
         };
         match File::create_new(&filepath) {
             Ok(mut file) => {
-                writeln!(file, "{}", task.to_data_string())?;
+                write!(file, "{}", task.to_data_string())?;
                 Ok(db_status)
             }
             Err(e) => {
