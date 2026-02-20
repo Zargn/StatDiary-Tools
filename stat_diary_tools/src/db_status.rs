@@ -24,6 +24,10 @@ impl ActiveTask {
         }
     }
 
+    //
+
+    //
+
     fn to_data_string(self) -> String {
         let task_id = self.task_id();
         let task_data = match self {
@@ -35,6 +39,10 @@ impl ActiveTask {
         format!("{}|{}", task_id, task_data)
     }
 
+    //
+
+    //
+
     fn task_id(&self) -> u8 {
         match self {
             Self::None => 0,
@@ -44,6 +52,10 @@ impl ActiveTask {
         }
     }
 }
+
+//
+
+//
 
 #[derive(Debug)]
 pub enum DBStatusError {
@@ -59,9 +71,17 @@ impl From<io::Error> for DBStatusError {
     }
 }
 
+//
+
+//
+
 type Result<T> = std::result::Result<T, DBStatusError>;
 
 const STATUSFILENAME: &str = ".status.txt";
+
+//
+
+//
 
 #[derive(Debug)]
 pub struct DBStatus {
@@ -94,6 +114,10 @@ impl DBStatus {
             }
         }
     }
+
+    //
+
+    //
 
     pub fn deactivate(self) {
         let _removal_result = std::fs::remove_file(self.status_path);

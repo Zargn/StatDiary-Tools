@@ -339,6 +339,33 @@ pub unsafe extern "C" fn MergeTags(
 fn merge_tags(db_path: &Path, tag1: &str, tag2: &str) -> Result<(), DBError> {
     let tags = TagList::from_file(db_path)?;
 
+    /*
+    Get tag ids for both tag1 and tag2.
+
+    iterate through all .statdiary files in the data directory.
+        for each data_entry in file
+            if tag1 could be removed from data_entry.tags
+                ensure tag2 is exists in data_entry.tags.
+                (Since we are merging two tags we don't want to store two duplicate tags in a single entry)
+
+    {
+        Iterate through all .stat_avg files.
+            read contents into a hashmap of ids and occurnaces.
+            if tag1 does not exist in the map and tag2 does not exist in the map
+                skip this file
+            get occurnaces of tag1 from hashmap [tag_occurances]
+                if tag1 does not exist then set [tag_occurances] to 0.
+            get entry or default of tag2 from hashmap and add [tag_occurances] to that value.
+    }
+    OR
+    {
+        call regenerate_averages function.
+    }
+
+
+    call regenerate_caches function.
+    */
+
     todo!();
 }
 

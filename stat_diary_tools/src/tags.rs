@@ -78,17 +78,29 @@ impl TagList {
         })
     }
 
+    //
+
+    //
+
     pub fn get_id(&self, tag: &str) -> Result<&u16> {
         self.str_id_map
             .get(tag)
             .ok_or(DBError::UnknownTag(tag.to_string()))
     }
 
+    //
+
+    //
+
     pub fn get_tag(&self, tag_id: u16) -> Result<&String> {
         self.id_str_map
             .get(&tag_id)
             .ok_or(DBError::UnknownId(tag_id))
     }
+
+    //
+
+    //
 
     pub fn rename_tag(&mut self, old_tag: String, new_tag: String) -> Result<()> {
         println!("str-id map: \n{:?}\n\n", self.str_id_map);
@@ -108,6 +120,10 @@ impl TagList {
 
         Ok(())
     }
+
+    //
+
+    //
 
     pub fn save_to_file(self, db_path: &Path) -> Result<()> {
         let filepath = db_path.join("tags.txt");
