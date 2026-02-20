@@ -459,6 +459,11 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
         let path = path?;
         let path = path.path();
         if path.is_file() {
+            if let Some(e) = path.extension() {
+                if e.to_str() != Some("txt") {
+                    continue;
+                }
+            }
             println!("{:?}", path);
             transform_data_file(path.to_str().unwrap(), &mut tags)?;
         }
@@ -471,13 +476,54 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
 
     let mut tags_writer = BufWriter::new(tags_file);
 
-    for (k, v) in tags {
+    for (k, v) in &tags {
         writeln!(tags_writer, "{} {}", v, k)?;
     }
 
     tags_writer.flush()?;
+    update_averages(Path::new(db_path))?;
 
     Ok(())
+}
+
+pub fn update_averages(db_path: &Path) -> Result<(), Box<dyn Error>> {
+    let taglist = TagList::from_file(db_path).unwrap();
+    for path in WalkDir::new(db_path.join("averages")) {
+        let path = path?;
+        if path.path().is_file() {
+            println!("{:?}", path);
+            transform_average_file(&taglist, path.path())?;
+        }
+    }
+
+    Ok(())
+}
+
+fn transform_average_file(taglist: &TagList, file_path: &Path) -> Result<(), Box<dyn Error>> {
+    let new_file_path = file_path.with_extension("stat_avg");
+    let mut result_writer = BufWriter::new(File::create(new_file_path)?);
+    //println!("New avg file: {:?}", new_file_path);
+
+    for line in read_lines(file_path)? {
+        let mut parts = line.split(' ');
+        let (occurances, tag) = (parts.next().unwrap(), parts.next().unwrap());
+        println!("{} | {}", occurances, tag);
+        writeln!(
+            result_writer,
+            "{} {}",
+            occurances,
+            taglist.get_id(tag).unwrap()
+        )?;
+        //writeln!(result_writer, "{} {}")
+        //todo!();
+    }
+
+    result_writer.flush()?;
+
+    std::fs::remove_file(file_path)?;
+
+    Ok(())
+    //todo!();
 }
 
 //
@@ -501,35 +547,6 @@ pub fn transform_data_file(
     file_path: &str,
     tags: &mut HashMap<String, u16>,
 ) -> Result<(), Box<dyn Error>> {
-    //  split file name at '-'
-    //      get the index of the day of week named in the result part 2.
-    //      create a result_file with name: result part 1 + '-' + day index
-    //
-    //  For each row in file
-    //      split row at '|'
-    //          part1 is the hour
-    //          part2 is the mental score
-    //          part3 is the physical score
-    //          part4 are the tags
-    //      split part1 at ':'
-    //          parse a u8 from the first result part
-    //          write u8 to result_file
-    //      for part2 and part3
-    //          split at ','
-    //              parse a u8 from the first result part
-    //              write u8 to result_file
-    //      split part4 at ' '
-    //          for each result part
-    //              if result part exists in tags
-    //                  write tag u16 to result_file
-    //              else
-    //                  write tags.len() to result file
-    //                  add result part to tags with value tags.len()
-    //      add u16::MAX to result file
-    //
-    //  save result file
-    //  delete original file
-
     let Ok(lines) = read_lines(file_path) else {
         // File does not exist
         // Exit early with error
