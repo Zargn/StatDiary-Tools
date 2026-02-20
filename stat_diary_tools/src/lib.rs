@@ -11,11 +11,13 @@ use walkdir::WalkDir;
 use zip::unstable::write;
 
 use crate::{
+    averages::regenerate_tag_sums,
     cache_handling::{regenerate_caches, RegenCachesError},
     data_entry::DataEntry,
     db_status::{ActiveTask, DBStatus, DBStatusError},
     tags::{DBError, TagList},
 };
+mod averages;
 mod cache_handling;
 mod data_entry;
 mod db_status;
@@ -239,6 +241,10 @@ fn read_sorted_directory(directory_path: &Path) -> Result<Vec<PathBuf>, io::Erro
     Ok(files)
 }
 
+//
+
+//
+
 #[derive(Debug, Default)]
 struct Overview {
     min_m_score: u8,
@@ -333,8 +339,13 @@ pub unsafe extern "C" fn MergeTags(
     }
 
     db_status.deactivate();
-    todo!();
+
+    0
 }
+
+//
+
+//
 
 fn merge_tags(db_path: &Path, tag1: &str, tag2: &str) -> Result<(), DBError> {
     let tags = TagList::from_file(db_path)?;
@@ -368,7 +379,26 @@ fn merge_tags(db_path: &Path, tag1: &str, tag2: &str) -> Result<(), DBError> {
 
     todo!();
 }
+#[no_mangle]
+pub unsafe extern "C" fn RegenerateTagSums(db_path: *const c_char) -> i32 {
+    if db_path.is_null() {
+        return -1;
+    }
+    let db_path = unsafe { CStr::from_ptr(db_path) };
 
+    let Ok(path) = db_path.to_str() else {
+        return -2;
+    };
+
+    let db_path = Path::new(path);
+
+    if let Err(error) = regenerate_tag_sums(db_path) {
+        println!("Error occured! \n{:?}", error);
+        return error.into_code();
+    }
+
+    0
+}
 //
 
 //
@@ -411,6 +441,10 @@ pub unsafe extern "C" fn RenameTag(
 
     0
 }
+
+//
+
+//
 
 fn rename_tag(db_path: &Path, old_tag: String, new_tag: String) -> Result<(), DBError> {
     let mut tags = TagList::from_file(db_path)?;
@@ -513,6 +547,10 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+//
+
+//
+
 pub fn update_averages(db_path: &Path) -> Result<(), Box<dyn Error>> {
     let taglist = TagList::from_file(db_path).unwrap();
     for path in WalkDir::new(db_path.join("averages")) {
@@ -525,6 +563,10 @@ pub fn update_averages(db_path: &Path) -> Result<(), Box<dyn Error>> {
 
     Ok(())
 }
+
+//
+
+//
 
 fn transform_average_file(taglist: &TagList, file_path: &Path) -> Result<(), Box<dyn Error>> {
     let new_file_path = file_path.with_extension("stat_avg");
