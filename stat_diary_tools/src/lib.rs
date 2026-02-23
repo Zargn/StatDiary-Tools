@@ -134,6 +134,14 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
                 return error.into_code();
             }
         }
+        ActiveTask::RegenerateTagSums => {
+            if let Err(error) = regenerate_tag_sums(Path::new(path)) {
+                println!("Error occured!\n{:?}", error);
+
+                db_status.deactivate();
+                return error.into_code();
+            }
+        }
         ActiveTask::MergeTags(tag_1, tag_2) => {}
         ActiveTask::RenameTag(old_tag, new_tag) => {
             if let Err(error) = rename_tag(Path::new(path), old_tag, new_tag) {
@@ -379,6 +387,11 @@ fn merge_tags(db_path: &Path, tag1: &str, tag2: &str) -> Result<(), DBError> {
 
     todo!();
 }
+
+//
+
+//
+
 #[no_mangle]
 pub unsafe extern "C" fn RegenerateTagSums(db_path: *const c_char) -> i32 {
     if db_path.is_null() {
@@ -392,13 +405,23 @@ pub unsafe extern "C" fn RegenerateTagSums(db_path: *const c_char) -> i32 {
 
     let db_path = Path::new(path);
 
+    let Ok(db_status) = DBStatus::activate(db_path.to_path_buf(), ActiveTask::RegenerateTagSums)
+    else {
+        println!("Database is busy! Aborting...");
+        return -3;
+    };
+
     if let Err(error) = regenerate_tag_sums(db_path) {
         println!("Error occured! \n{:?}", error);
+        db_status.deactivate();
         return error.into_code();
     }
 
+    db_status.deactivate();
+
     0
 }
+
 //
 
 //

@@ -52,36 +52,43 @@ pub fn regenerate_tag_sums(db_path: &Path) -> Result<()> {
     let mut day_and_times: HashMap<u8, HashMap<u8, Tags>> = HashMap::new();
 
     for path in WalkDir::new(db_path.join("data")) {
-        let filepath = path?;
-        if filepath.path().is_file() {
-            let filename = filepath
-                .path()
-                .file_stem()
-                .ok_or(DBAveragesError::InvalidFileName(format!("{:?}", filepath)))?
-                .to_str()
-                .ok_or(DBAveragesError::InvalidFileName(format!("{:?}", filepath)))?;
+        let path = path?;
+        let filepath = path.path();
 
-            let mut parts = filename.split('-');
-            parts.next();
-            let weekday_nr = parts
-                .next()
-                .ok_or(DBAveragesError::InvalidFileName(filename.to_string()))?
-                .parse::<u8>()
-                .map_err(|_| DBAveragesError::InvalidFileName(filename.to_string()))?;
-
-            let mut weekday_times = day_and_times.entry(weekday_nr).or_default();
-
-            for data_entry in DataEntry::read_from_file(filepath.path())? {
-                for tag in data_entry.tags {
-                    general.add(tag);
-                    times.entry(data_entry.hour).or_default().add(tag);
-                    weekday_times.entry(data_entry.hour).or_default().add(tag);
-                }
-            }
-
-            println!("{:?}", filepath.path().file_stem());
+        if !filepath.is_file() {
+            continue;
         }
+
+        let filename = filename(filepath)?;
+
+        let weekday_times = day_and_times.entry(weekday_nr(filename)?).or_default();
+
+        for data_entry in DataEntry::read_from_file(filepath)? {
+            for tag in data_entry.tags {
+                general.add(tag);
+                times.entry(data_entry.hour).or_default().add(tag);
+                weekday_times.entry(data_entry.hour).or_default().add(tag);
+            }
+        }
+
+        //println!("{:?}", filepath.file_stem());
     }
 
     Ok(())
+}
+
+fn filename(filepath: &Path) -> Result<&str> {
+    filepath
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| DBAveragesError::InvalidFileName(format!("{:?}", filepath)))
+}
+
+fn weekday_nr(filename: &str) -> Result<u8> {
+    filename
+        .split('-')
+        .nth(1)
+        .ok_or_else(|| DBAveragesError::InvalidFileName(filename.to_string()))?
+        .parse::<u8>()
+        .map_err(|_| DBAveragesError::InvalidFileName(filename.to_string()))
 }

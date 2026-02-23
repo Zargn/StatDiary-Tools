@@ -10,6 +10,7 @@ use crate::db_status;
 pub enum ActiveTask {
     None,
     RegenerateCaches,
+    RegenerateTagSums,
     MergeTags(String, String),
     RenameTag(String, String),
 }
@@ -20,6 +21,7 @@ impl ActiveTask {
         match parts.next().ok_or(DBStatusError::UnknownTask)? {
             "0" => Ok(ActiveTask::None),
             "1" => Ok(ActiveTask::RegenerateCaches),
+            "2" => Ok(ActiveTask::RegenerateTagSums),
             _ => Err(DBStatusError::UnknownTask),
         }
     }
@@ -33,6 +35,7 @@ impl ActiveTask {
         let task_data = match self {
             Self::None => "",
             Self::RegenerateCaches => "",
+            Self::RegenerateTagSums => "",
             Self::MergeTags(s1, s2) => &format!("{} {}", s1, s2),
             Self::RenameTag(s1, s2) => &format!("{} {}", s1, s2),
         };
@@ -47,8 +50,9 @@ impl ActiveTask {
         match self {
             Self::None => 0,
             Self::RegenerateCaches => 1,
-            Self::MergeTags(_, _) => 2,
-            Self::RenameTag(_, _) => 3,
+            Self::RegenerateTagSums => 2,
+            Self::MergeTags(_, _) => 3,
+            Self::RenameTag(_, _) => 4,
         }
     }
 }
