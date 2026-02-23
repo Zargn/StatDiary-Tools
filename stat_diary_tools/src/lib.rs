@@ -12,7 +12,7 @@ use zip::unstable::write;
 
 use crate::{
     averages::regenerate_tag_sums,
-    backup::compress_to_image,
+    backup::{compress_to_image, load_image},
     cache_handling::{regenerate_caches, RegenCachesError},
     data_entry::DataEntry,
     db_status::{ActiveTask, DBStatus, DBStatusError},
@@ -45,6 +45,34 @@ pub unsafe extern "C" fn CompressDBToImage(
     if let Err(error) = compress_to_image(
         Path::new(&db_path.to_string()),
         Path::new(&result_path.to_string()),
+    ) {
+        println!("Error occured! [{:?}]", error);
+        return -2;
+    }
+
+    //compress_db_to_image(&db_path, &result_path);
+
+    1
+}
+
+//
+
+//
+
+#[no_mangle]
+pub unsafe extern "C" fn ExtractDBFromImage(
+    result_db_path: *const c_char,
+    db_image_path: *const c_char,
+) -> i32 {
+    if result_db_path.is_null() || db_image_path.is_null() {
+        return -1;
+    }
+    let result_db_path = unsafe { CStr::from_ptr(result_db_path).to_string_lossy() };
+    let db_image_path = unsafe { CStr::from_ptr(db_image_path).to_string_lossy() };
+
+    if let Err(error) = load_image(
+        Path::new(&result_db_path.to_string()),
+        Path::new(&db_image_path.to_string()),
     ) {
         println!("Error occured! [{:?}]", error);
         return -2;
