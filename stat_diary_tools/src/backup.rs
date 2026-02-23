@@ -1,9 +1,10 @@
 use std::{
     error::Error,
     io::{Cursor, Read},
+    marker,
 };
 
-use image::{ImageBuffer, ImageReader};
+use image::{EncodableLayout, ImageBuffer, ImageReader};
 use std::fs::File;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -18,7 +19,6 @@ pub fn compress_to_image(db_path: &Path, result_path: &Path) -> Result<(), Box<d
 
     get_data_from_image(result_path)?;
 
-    //todo!();
     Ok(())
 }
 
@@ -28,17 +28,17 @@ pub fn compress_to_image(db_path: &Path, result_path: &Path) -> Result<(), Box<d
 
 fn convert_to_image(target_path: &Path, data: Vec<u8>) {
     let byte_count = data.len() as u32;
-    let img_size = ((byte_count as f64 + 4.0) / 4.0).sqrt().ceil() as u32;
+    let img_size = ((byte_count as f64 + 8.0) / 4.0).sqrt().ceil() as u32;
 
     println!("Byte count: {}\nImg size: {}", byte_count, img_size);
 
     let mut imgbuf = ImageBuffer::new(img_size, img_size);
 
     let bytes = byte_count.to_be_bytes();
-    let mut i = 0;
-    for (_, _, pixel) in imgbuf.enumerate_pixels_mut().take(1) {
-        *pixel = image::Rgba([bytes[i], bytes[i + 1], bytes[i + 2], bytes[i + 3]]);
-        i += 4;
+    let markers = [image::Rgba([255, 255, 255, 255]), image::Rgba(bytes)];
+
+    for (i, (_, _, pixel)) in imgbuf.enumerate_pixels_mut().take(2).enumerate() {
+        *pixel = markers[i];
     }
 
     let mut data_iter = data.iter();
@@ -64,7 +64,11 @@ fn get_byte(data: Option<&u8>) -> u8 {
 
 fn get_data_from_image(img_path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
     let data = ImageReader::open(img_path)?.decode()?;
-    let (int_bytes, image_data) = data.as_bytes().split_at(size_of::<u32>());
+    let bytes = data.as_bytes();
+    if bytes.iter().take(4).any(|b| *b != 255) {
+        return Err("This image does not hold a compressed database!".into());
+    }
+    let (int_bytes, image_data) = bytes.split_at(4).1.split_at(size_of::<u32>());
     let byte_count = u32::from_be_bytes(int_bytes.try_into()?);
 
     let data: Vec<&u8> = image_data.iter().take(byte_count as usize).collect();
