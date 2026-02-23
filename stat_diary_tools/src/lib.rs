@@ -12,12 +12,14 @@ use zip::unstable::write;
 
 use crate::{
     averages::regenerate_tag_sums,
+    backup::compress_to_image,
     cache_handling::{regenerate_caches, RegenCachesError},
     data_entry::DataEntry,
     db_status::{ActiveTask, DBStatus, DBStatusError},
     tags::{DBError, TagList},
 };
 mod averages;
+mod backup;
 mod cache_handling;
 mod data_entry;
 mod db_status;
@@ -40,7 +42,15 @@ pub unsafe extern "C" fn CompressDBToImage(
     let db_path = unsafe { CStr::from_ptr(db_path).to_string_lossy() };
     let result_path = unsafe { CStr::from_ptr(result_path).to_string_lossy() };
 
-    compress_db_to_image(&db_path, &result_path);
+    if let Err(error) = compress_to_image(
+        Path::new(&db_path.to_string()),
+        Path::new(&result_path.to_string()),
+    ) {
+        println!("Error occured! [{:?}]", error);
+        return -2;
+    }
+
+    //compress_db_to_image(&db_path, &result_path);
 
     1
 }
@@ -50,6 +60,22 @@ pub unsafe extern "C" fn CompressDBToImage(
 //
 
 fn compress_db_to_image(db_path: &str, result_path: &str) -> Result<(), Box<dyn Error>> {
+    /*
+    if db_path.is_null() {
+        return -1;
+    }
+    if result_path.is_null() {
+        return -2;
+    }
+
+    let Ok(path_str) = unsafe { CStr::from_ptr(db_path) }.to_str() else {
+        return -4;
+    };
+    let Ok(resu) = unsafe { CStr::from_ptr(result_path) }.to_str() else {
+        return -5;
+    };
+
+    let db_path = Path::new(path_str);*/
     println!("Using path: {}", db_path);
 
     if !Path::new(db_path).is_dir() {
