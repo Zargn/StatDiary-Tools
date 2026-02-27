@@ -1,12 +1,6 @@
-use core::arch;
-use std::{
-    error::Error,
-    fs,
-    io::{copy, Cursor, Read},
-    marker,
-};
+use std::{error::Error, io::Cursor};
 
-use image::{io, EncodableLayout, ImageBuffer, ImageReader};
+use image::{ImageBuffer, ImageReader};
 use std::fs::File;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -18,8 +12,6 @@ pub fn compress_to_image(db_path: &Path, result_path: &Path) -> Result<(), Box<d
 
     let data = zip_dir(db_path, method)?;
     convert_to_image(result_path, data);
-
-    //get_data_from_image(result_path)?;
 
     Ok(())
 }
@@ -142,21 +134,6 @@ fn zip_dir(
 //
 
 fn extract_db(target_path: &Path, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
-    /*
-    let mut archive = match fs::File::open(target_path)
-        .map_err(ZipError::from)
-        .and_then(ZipArchive::new)
-    {
-        Ok(archive) => archive,
-        Err(e) => {
-            eprintln!(
-                "Error: unable to open archive {:?}: {e}",
-                target_path.display()
-            );
-            return Err(e.into());
-        }
-    }; */
-
     let mut archive = match ZipArchive::new(Cursor::new(data)) {
         Ok(archive) => archive,
         Err(e) => {
@@ -168,99 +145,5 @@ fn extract_db(target_path: &Path, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
         }
     };
     archive.extract(target_path)?;
-
-    /*
-    let mut some_files_failed = false;
-    for i in 0..archive.len() {
-        let mut file = match archive.by_index(i) {
-            Ok(file) => file,
-            Err(e) => {
-                eprintln!("Error: unable to open file {i} in archive: {e}");
-                some_files_failed = true;
-                continue;
-            }
-        };
-        let out_path = match file.enclosed_name() {
-            Some(path) => path,
-            None => {
-                eprintln!(
-                    "Error: unable to extract file {:?} because it has an invalid path.",
-                    file.name()
-                );
-                some_files_failed = true;
-                continue;
-            }
-        };
-        let comment = file.comment();
-        if !comment.is_empty() {
-            println!("File {i} comment: {comment:?}");
-        }
-        if file.is_dir() {
-            if let Err(e) = fs::create_dir_all(&out_path) {
-                eprintln!(
-                    "Error: unable to extract directory {i} to {:?}: {e}",
-                    out_path.display()
-                );
-                some_files_failed = true;
-                continue;
-            } else {
-                println!("Directory {i} extracted to {:?}", out_path.display());
-            }
-        } else {
-            if let Some(p) = out_path.parent() {
-                if !p.exists() {
-                    if let Err(e) = fs::create_dir_all(p) {
-                        eprintln!(
-                            "Error: unable to create parent directory {p:?} of file {}: {e}",
-                            p.display()
-                        );
-                        some_files_failed = true;
-                        continue;
-                    }
-                }
-            }
-            match fs::File::create(&out_path).and_then(|mut outfile| copy(&mut file, &mut outfile))
-            {
-                Ok(bytes_extracted) => {
-                    println!(
-                        "File {} extracted to {:?} ({bytes_extracted} bytes)",
-                        i,
-                        out_path.display(),
-                    );
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Error: unable to extract file {i} to {:?}: {e}",
-                        out_path.display()
-                    );
-                    some_files_failed = true;
-                    continue;
-                }
-            }
-        }
-
-        // Get and Set permissions
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            if let Some(mode) = file.unix_mode() {
-                if let Err(e) = fs::set_permissions(&out_path, fs::Permissions::from_mode(mode)) {
-                    eprintln!(
-                        "Error: unable to change permissions of file {i} ({:?}): {e}",
-                        out_path.display()
-                    );
-                    some_files_failed = true;
-                }
-            }
-        }
-    }
-
-    if some_files_failed {
-        eprintln!("Error: some files failed to extract; see above errors.");
-        Err("Extraction partially failed".into())
-    } else {
-        Ok(())
-    }*/
     Ok(())
 }

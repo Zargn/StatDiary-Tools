@@ -6,9 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    data_entry::DataEntry, read_sorted_directory, Overview, ScoreAverages, DATAFILEEXTENSION,
-};
+use crate::{data_entry::DataEntry, utilities::read_sorted_directory, DATAFILEEXTENSION};
 
 #[derive(Debug)]
 pub enum RegenCachesError {
@@ -45,6 +43,54 @@ impl From<io::Error> for RegenCachesError {
     fn from(io_err: io::Error) -> Self {
         println!("io_err: {}", io_err);
         Self::IoError(io_err)
+    }
+}
+
+//
+
+//
+
+struct ScoreAverages {
+    avg_mental: f32,
+    avg_physical: f32,
+}
+
+impl ScoreAverages {
+    fn to_data_str(&self) -> String {
+        format!("{} | {}", self.avg_mental, self.avg_physical)
+    }
+}
+
+//
+
+//
+
+#[derive(Debug, Default)]
+struct Overview {
+    min_m_score: u8,
+    max_m_score: u8,
+    avg_m_score: f32,
+    min_p_score: u8,
+    max_p_score: u8,
+    avg_p_score: f32,
+    tags: Vec<u16>,
+}
+
+impl Overview {
+    fn to_data_str(&self) -> String {
+        let mut data_str = format!(
+            "{} {} {} | {} {} {} |",
+            self.min_m_score,
+            self.max_m_score,
+            self.avg_m_score,
+            self.min_p_score,
+            self.max_p_score,
+            self.avg_p_score
+        );
+        for tag in &self.tags {
+            data_str.push_str(&format!(" {}", tag));
+        }
+        data_str
     }
 }
 

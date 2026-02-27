@@ -5,7 +5,7 @@ use std::{
     path::Path,
 };
 
-use crate::read_lines;
+use crate::utilities::read_lines;
 
 #[derive(Debug)]
 pub enum DBError {
