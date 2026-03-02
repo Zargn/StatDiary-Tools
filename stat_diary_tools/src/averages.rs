@@ -1,4 +1,4 @@
-use std::{collections::HashMap, io, path::Path};
+use std::{collections::HashMap, ffi::OsStr, io, path::Path};
 
 use walkdir::WalkDir;
 
@@ -60,6 +60,10 @@ pub fn regenerate_tag_sums(db_path: &Path) -> Result<()> {
         }
 
         let filename = filename(filepath)?;
+
+        if filepath.extension() != Some(OsStr::new("statdiary")) {
+            continue;
+        }
 
         let weekday_times = day_and_times.entry(weekday_nr(filename)?).or_default();
 
