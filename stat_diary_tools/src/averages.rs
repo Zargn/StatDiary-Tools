@@ -8,14 +8,15 @@ use std::{
 
 use walkdir::WalkDir;
 
-use crate::data_entry::DataEntry;
+use crate::{data_entry::DataEntry, stat_diary_error::DBAveragesError};
 
+/*
 #[derive(Debug)]
 pub enum DBAveragesError {
     IoError(io::Error),
     WalkDirError(walkdir::Error),
     InvalidFileName(String),
-}
+}*/
 
 impl From<io::Error> for DBAveragesError {
     fn from(value: io::Error) -> Self {

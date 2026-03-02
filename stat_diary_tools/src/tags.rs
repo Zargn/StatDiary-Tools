@@ -5,8 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::utilities::read_lines;
+use crate::{stat_diary_error::DBError, utilities::read_lines};
 
+/*
 #[derive(Debug)]
 pub enum DBError {
     IoError(io::Error),
@@ -15,7 +16,7 @@ pub enum DBError {
     UnknownId(u16),
     TagAlreadyExists,
     DataBaseBusy,
-}
+} */
 
 impl From<io::Error> for DBError {
     fn from(err: io::Error) -> Self {

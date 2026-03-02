@@ -139,12 +139,10 @@ impl DataEntry {
     fn merge_tags(&mut self, tag_1: u16, tag_2: u16) {
         let mut i = 0;
         let mut tag_found = false;
-        println!("Checking for tags");
         while i < self.tags.len() {
             if self.tags[i] == tag_1 || self.tags[i] == tag_2 {
                 self.tags.remove(i);
                 tag_found = true;
-                println!("Tag found at index {i}");
             } else {
                 i += 1;
             }
@@ -175,6 +173,7 @@ impl DataEntry {
 
     //
 
+    /*
     /// Prints the provided data entry
     pub fn temp_display_entry(&self, tags: &HashMap<u16, String>) {
         print!(
@@ -189,5 +188,5 @@ impl DataEntry {
             }
         }
         println!();
-    }
+    } */
 }

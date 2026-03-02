@@ -30,7 +30,7 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
                     continue;
                 }
             }
-            println!("{:?}", path);
+            //println!("{:?}", path);
             transform_data_file(path.to_str().unwrap(), &mut tags)?;
         }
     }

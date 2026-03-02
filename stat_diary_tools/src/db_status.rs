@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::db_status;
+use crate::{db_status, stat_diary_error::DBStatusError};
 
 #[derive(Debug)]
 pub enum ActiveTask {
@@ -72,6 +72,7 @@ impl ActiveTask {
 
 //
 
+/*
 #[derive(Debug)]
 pub enum DBStatusError {
     InvalidDataBasePath,
@@ -79,7 +80,7 @@ pub enum DBStatusError {
     DataBaseBusy(ActiveTask, DBStatus),
     MissingData,
     UnknownTask,
-}
+} */
 
 impl From<io::Error> for DBStatusError {
     fn from(err: io::Error) -> Self {

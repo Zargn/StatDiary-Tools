@@ -6,15 +6,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{data_entry::DataEntry, utilities::read_sorted_directory, DATAFILEEXTENSION};
+use crate::{
+    data_entry::DataEntry, stat_diary_error::RegenCachesError, utilities::read_sorted_directory,
+    DATAFILEEXTENSION,
+};
 
+/*
 #[derive(Debug)]
 pub enum RegenCachesError {
     InvalidRoot,
     IoError(io::Error),
     FoundUnknownFile(PathBuf),
     FoundUnknownFolder(PathBuf),
-}
+} */
 
 impl RegenCachesError {
     pub fn into_code(self) -> i32 {

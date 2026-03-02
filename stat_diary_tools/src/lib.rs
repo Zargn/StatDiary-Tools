@@ -10,8 +10,9 @@ use crate::{
     backup::{compress_to_image, load_image},
     cache_handling::regenerate_caches,
     data_entry::DataFile,
-    db_status::{ActiveTask, DBStatus, DBStatusError},
-    tags::{DBError, TagList},
+    db_status::{ActiveTask, DBStatus},
+    stat_diary_error::{DBError, DBStatusError},
+    tags::TagList,
     update_database::temporary_update_database,
     utilities::try_ptr_to_string,
 };
@@ -20,6 +21,7 @@ mod backup;
 mod cache_handling;
 mod data_entry;
 mod db_status;
+mod stat_diary_error;
 mod tags;
 mod update_database;
 
