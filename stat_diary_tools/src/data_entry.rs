@@ -1,9 +1,75 @@
 use std::{
     collections::HashMap,
-    fs::File,
-    io::{self, Read},
-    path::Path,
+    error::Error,
+    fs::{self, File},
+    io::{self, BufWriter, Read, Write},
+    path::{Path, PathBuf},
 };
+
+use crate::data_entry;
+
+pub struct DataFile {
+    entries: Vec<DataEntry>,
+    file_path: PathBuf,
+}
+
+impl DataFile {
+    /// Reads all entries in the provided file and returns a list of assembled DataEntry structs
+    pub fn read_from_file(file_path: PathBuf) -> Result<DataFile, io::Error> {
+        let bytes: Vec<u8> = io::BufReader::new(File::open(&file_path)?)
+            .bytes()
+            .map_while(Result::ok)
+            .collect();
+
+        let mut i = 0;
+
+        let mut entries = Vec::new();
+
+        while i < bytes.len() {
+            let hour = bytes[i];
+            let mental_score = bytes[i + 1];
+            let physical_score = bytes[i + 2];
+
+            let mut tags = Vec::new();
+            i += 3;
+            loop {
+                let tag_id = ((bytes[i] as u16) << 8) | bytes[i + 1] as u16;
+                if tag_id == u16::MAX {
+                    i += 2;
+                    break;
+                }
+                i += 2;
+
+                tags.push(tag_id);
+            }
+
+            let data_entry = DataEntry::new(hour, mental_score, physical_score, tags);
+            entries.push(data_entry);
+        }
+
+        Ok(DataFile { entries, file_path })
+    }
+
+    pub fn save(self) -> Result<(), io::Error> {
+        let mut tmp_path = self.file_path.clone();
+        tmp_path.add_extension("tmp");
+
+        let new_file = File::create(&tmp_path)?;
+        let mut writer = BufWriter::new(new_file);
+
+        for data_entry in self.entries {
+            //
+            // TODO: Merge tags
+            //
+            data_entry.write(&mut writer)?;
+        }
+        writer.flush()?;
+
+        fs::rename(tmp_path, self.file_path)?;
+
+        Ok(())
+    }
+}
 
 pub struct DataEntry {
     pub hour: u8,
@@ -60,6 +126,17 @@ impl DataEntry {
         }
 
         Ok(data_entries)
+    }
+
+    pub fn write(&self, writer: &mut impl io::Write) -> Result<(), io::Error> {
+        writer.write_all(&[self.hour, self.mental_score, self.physical_score])?;
+
+        for tag_id in &self.tags {
+            writer.write_all(&tag_id.to_be_bytes())?;
+        }
+
+        writer.write_all(&u16::MAX.to_be_bytes())?;
+        Ok(())
     }
 
     //

@@ -11,7 +11,7 @@ pub enum ActiveTask {
     None,
     RegenerateCaches,
     RegenerateTagSums,
-    MergeTags(String, String),
+    MergeTags(u16, u16),
     RenameTag(String, String),
 }
 
@@ -22,6 +22,17 @@ impl ActiveTask {
             "0" => Ok(ActiveTask::None),
             "1" => Ok(ActiveTask::RegenerateCaches),
             "2" => Ok(ActiveTask::RegenerateTagSums),
+            "3" => {
+                let (tag_1, tag_2) = {
+                    let mut data = parts.next().ok_or(DBStatusError::MissingData)?.split(' ');
+                    (
+                        data.next().unwrap().parse().unwrap(),
+                        data.next().unwrap().parse().unwrap(),
+                    )
+                };
+
+                Ok(ActiveTask::MergeTags(tag_1, tag_2))
+            }
             _ => Err(DBStatusError::UnknownTask),
         }
     }
@@ -66,6 +77,7 @@ pub enum DBStatusError {
     InvalidDataBasePath,
     IoError(io::Error),
     DataBaseBusy(ActiveTask, DBStatus),
+    MissingData,
     UnknownTask,
 }
 

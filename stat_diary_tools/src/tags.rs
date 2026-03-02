@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    fs::File,
+    fs::{self, File},
     io::{self, BufWriter, Write},
     path::Path,
 };
@@ -103,10 +103,10 @@ impl TagList {
     //
 
     pub fn rename_tag(&mut self, old_tag: String, new_tag: String) -> Result<()> {
-        println!("str-id map: \n{:?}\n\n", self.str_id_map);
-        println!("id-str map: \n{:?}\n\n", self.id_str_map);
+        //println!("str-id map: \n{:?}\n\n", self.str_id_map);
+        //println!("id-str map: \n{:?}\n\n", self.id_str_map);
 
-        println!("old-tag: {}, new-tag: {}", old_tag, new_tag);
+        //println!("old-tag: {}, new-tag: {}", old_tag, new_tag);
         if self.str_id_map.contains_key(&new_tag) {
             return Err(DBError::TagAlreadyExists);
         }
@@ -126,15 +126,17 @@ impl TagList {
     //
 
     pub fn save_to_file(self, db_path: &Path) -> Result<()> {
+        let tmp_path = db_path.join("tags.txt.tmp");
         let filepath = db_path.join("tags.txt");
 
-        let mut writer = BufWriter::new(File::create(filepath)?);
+        let mut writer = BufWriter::new(File::create(&tmp_path)?);
 
         for (id, tag) in self.id_str_map.iter() {
             writeln!(writer, "{} {}", id, tag)?;
         }
 
         writer.flush()?;
+        fs::rename(tmp_path, filepath)?;
         Ok(())
     }
 }

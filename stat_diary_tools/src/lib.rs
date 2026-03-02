@@ -1,12 +1,15 @@
 use std::{
-    ffi::{c_char, CStr},
+    ffi::{c_char, CStr, OsStr},
     path::Path,
 };
+
+use walkdir::WalkDir;
 
 use crate::{
     averages::regenerate_tag_sums,
     backup::{compress_to_image, load_image},
     cache_handling::regenerate_caches,
+    data_entry::DataFile,
     db_status::{ActiveTask, DBStatus, DBStatusError},
     tags::{DBError, TagList},
     update_database::temporary_update_database,
@@ -158,7 +161,14 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
                 return error.into_code();
             }
         }
-        ActiveTask::MergeTags(tag_1, tag_2) => {}
+        ActiveTask::MergeTags(tag_1, tag_2) => {
+            if let Err(error) = merge_tags(Path::new(path), tag_1, tag_2) {
+                println!("Error occured!\n{:?}", error);
+
+                db_status.deactivate();
+                return error.into_code();
+            }
+        }
         ActiveTask::RenameTag(old_tag, new_tag) => {
             if let Err(error) = rename_tag(Path::new(path), old_tag, new_tag) {
                 println!("Error occured!\n{:?}", error);
@@ -180,30 +190,21 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
 //
 
 #[no_mangle]
-pub unsafe extern "C" fn MergeTags(
-    db_path: *const c_char,
-    tag1: *const c_char,
-    tag2: *const c_char,
-) -> i32 {
+pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16) -> i32 {
     let Ok(path) = try_ptr_to_string(db_path) else {
         return -1;
-    };
-    let Ok(tag1) = try_ptr_to_string(tag1) else {
-        return -2;
-    };
-    let Ok(tag2) = try_ptr_to_string(tag2) else {
-        return -3;
     };
 
     let db_path = Path::new(&path);
 
-    let Ok(db_status) = DBStatus::activate(db_path.to_path_buf(), ActiveTask::RegenerateCaches)
+    let Ok(db_status) =
+        DBStatus::activate(db_path.to_path_buf(), ActiveTask::MergeTags(tag1, tag2))
     else {
         println!("Database is busy! Aborting...");
         return -3;
     };
 
-    if let Err(error) = merge_tags(db_path, &tag1, &tag2) {
+    if let Err(error) = merge_tags(db_path, tag1, tag2) {
         println!("Error occured!\n{:?}", error);
 
         db_status.deactivate();
@@ -220,15 +221,27 @@ pub unsafe extern "C" fn MergeTags(
 //
 
 /*
-When merging two tags check the general averages and make sure to merge the less used tag
-into the more used one. This will minimize the amount of edits to the data file.
-
 Make sure to add a check when adding tags to fill out any potential empty space left by a
 merge.
 */
-fn merge_tags(db_path: &Path, tag1: &str, tag2: &str) -> Result<(), DBError> {
+fn merge_tags(db_path: &Path, tag1: u16, tag2: u16) -> Result<(), DBError> {
     let tags = TagList::from_file(db_path)?;
 
+    for path in WalkDir::new(db_path.join("data")) {
+        let path = path.unwrap();
+        let filepath = path.path();
+
+        if !filepath.is_file() {
+            continue;
+        }
+
+        if filepath.extension() != Some(OsStr::new("statdiary")) {
+            continue;
+        }
+
+        let data_file = DataFile::read_from_file(filepath.to_path_buf())?;
+        data_file.save();
+    }
     /*
     Get tag ids for both tag1 and tag2.
 
@@ -238,25 +251,14 @@ fn merge_tags(db_path: &Path, tag1: &str, tag2: &str) -> Result<(), DBError> {
                 ensure tag2 is exists in data_entry.tags.
                 (Since we are merging two tags we don't want to store two duplicate tags in a single entry)
 
-    {
-        Iterate through all .stat_avg files.
-            read contents into a hashmap of ids and occurnaces.
-            if tag1 does not exist in the map and tag2 does not exist in the map
-                skip this file
-            get occurnaces of tag1 from hashmap [tag_occurances]
-                if tag1 does not exist then set [tag_occurances] to 0.
-            get entry or default of tag2 from hashmap and add [tag_occurances] to that value.
-    }
-    OR
-    {
-        call regenerate_averages function.
-    }
+
+    call regenerate_tag_sums function.
 
 
     call regenerate_caches function.
     */
 
-    todo!();
+    Ok(())
 }
 
 //
