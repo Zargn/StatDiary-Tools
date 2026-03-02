@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{self, BufWriter, Write},
-    path::Path,
+    io::{self, BufWriter, Read, Write},
+    path::{Path, PathBuf},
 };
 
 use crate::utilities::read_lines;
@@ -14,6 +14,7 @@ pub enum DBError {
     UnknownTag(String),
     UnknownId(u16),
     TagAlreadyExists,
+    DataBaseBusy,
 }
 
 impl From<io::Error> for DBError {
@@ -30,6 +31,7 @@ impl DBError {
             Self::UnknownTag(_) => 3,
             Self::UnknownId(_) => 4,
             Self::TagAlreadyExists => 5,
+            Self::DataBaseBusy => 6,
         }
     }
 }
@@ -39,6 +41,8 @@ type Result<T> = std::result::Result<T, DBError>;
 pub struct TagList {
     id_str_map: HashMap<u16, String>,
     str_id_map: HashMap<String, u16>,
+    removed_ids: Vec<u16>,
+    db_path: PathBuf,
 }
 
 impl TagList {
@@ -75,6 +79,8 @@ impl TagList {
         Ok(TagList {
             id_str_map,
             str_id_map,
+            removed_ids: Vec::new(),
+            db_path: db_path.to_path_buf(),
         })
     }
 
@@ -96,6 +102,23 @@ impl TagList {
         self.id_str_map
             .get(&tag_id)
             .ok_or(DBError::UnknownId(tag_id))
+    }
+
+    //
+
+    //
+
+    pub fn remove_tag(&mut self, tag_id: u16) -> Result<()> {
+        let tag_str = self
+            .id_str_map
+            .remove(&tag_id)
+            .ok_or(DBError::UnknownId(tag_id))?;
+        self.str_id_map
+            .remove(&tag_str)
+            .ok_or(DBError::UnknownTag(tag_str))?;
+
+        self.removed_ids.push(tag_id);
+        Ok(())
     }
 
     //
@@ -125,9 +148,21 @@ impl TagList {
 
     //
 
-    pub fn save_to_file(self, db_path: &Path) -> Result<()> {
-        let tmp_path = db_path.join("tags.txt.tmp");
-        let filepath = db_path.join("tags.txt");
+    pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) -> Result<()> {
+        let _ = self.get_tag(tag_1)?;
+        let _ = self.get_tag(tag_2)?;
+
+        self.remove_tag(tag_1)?;
+        Ok(())
+    }
+
+    //
+
+    //
+
+    pub fn save(self) -> Result<()> {
+        let tmp_path = self.db_path.join("tags.txt.tmp");
+        let filepath = self.db_path.join("tags.txt");
 
         let mut writer = BufWriter::new(File::create(&tmp_path)?);
 
@@ -137,6 +172,33 @@ impl TagList {
 
         writer.flush()?;
         fs::rename(tmp_path, filepath)?;
+
+        if !self.removed_ids.is_empty() {
+            self.save_removed_ids()?;
+        }
+
+        Ok(())
+    }
+
+    fn save_removed_ids(&self) -> Result<()> {
+        let tmp_path = self.db_path.join("unused_tags.tags.tmp");
+        let filepath = self.db_path.join("unused_tags.tags");
+
+        let mut writer = BufWriter::new(File::create(&tmp_path)?);
+
+        if let Ok(mut file) = File::open(&filepath) {
+            let mut bytes = Vec::new();
+            file.read_to_end(&mut bytes)?;
+            writer.write_all(&bytes)?;
+        }
+
+        for tag_id in &self.removed_ids {
+            writer.write_all(&tag_id.to_be_bytes())?;
+        }
+
+        writer.flush()?;
+        fs::rename(tmp_path, filepath)?;
+
         Ok(())
     }
 }

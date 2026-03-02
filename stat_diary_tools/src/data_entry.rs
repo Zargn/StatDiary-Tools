@@ -50,6 +50,12 @@ impl DataFile {
         Ok(DataFile { entries, file_path })
     }
 
+    pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) {
+        for data_entry in &mut self.entries {
+            data_entry.merge_tags(tag_1, tag_2);
+        }
+    }
+
     pub fn save(self) -> Result<(), io::Error> {
         let mut tmp_path = self.file_path.clone();
         tmp_path.add_extension("tmp");
@@ -58,9 +64,6 @@ impl DataFile {
         let mut writer = BufWriter::new(new_file);
 
         for data_entry in self.entries {
-            //
-            // TODO: Merge tags
-            //
             data_entry.write(&mut writer)?;
         }
         writer.flush()?;
@@ -122,12 +125,41 @@ impl DataEntry {
             }
 
             let data_entry = DataEntry::new(hour, mental_score, physical_score, tags);
+
             data_entries.push(data_entry);
         }
 
         Ok(data_entries)
     }
 
+    //
+
+    //
+
+    fn merge_tags(&mut self, tag_1: u16, tag_2: u16) {
+        let mut i = 0;
+        let mut tag_found = false;
+        println!("Checking for tags");
+        while i < self.tags.len() {
+            if self.tags[i] == tag_1 || self.tags[i] == tag_2 {
+                self.tags.remove(i);
+                tag_found = true;
+                println!("Tag found at index {i}");
+            } else {
+                i += 1;
+            }
+        }
+        if tag_found {
+            self.tags.push(tag_2);
+        }
+    }
+
+    //
+
+    //
+
+    /// Writes this data_entry in bytes to the provided writer. Ending the write with a 2 byte
+    /// u16::MAX marker.
     pub fn write(&self, writer: &mut impl io::Write) -> Result<(), io::Error> {
         writer.write_all(&[self.hour, self.mental_score, self.physical_score])?;
 

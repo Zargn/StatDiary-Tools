@@ -8,7 +8,12 @@ use std::{
 
 use walkdir::WalkDir;
 
-use crate::{tags::TagList, utilities::read_lines, DATAFILEEXTENSION};
+use crate::{
+    averages::{self, regenerate_tag_sums},
+    tags::TagList,
+    utilities::read_lines,
+    DATAFILEEXTENSION,
+};
 
 pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
     let mut tags: HashMap<String, u16> = HashMap::new();
@@ -42,7 +47,10 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
     }
 
     tags_writer.flush()?;
-    update_averages(Path::new(db_path))?;
+    //update_averages(Path::new(db_path))?;
+    if let Err(e) = regenerate_tag_sums(Path::new(db_path)) {
+        println!("regenerate_tag_sums error occured!\n{:?}", e);
+    }
 
     Ok(())
 }

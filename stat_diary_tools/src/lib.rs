@@ -197,23 +197,61 @@ pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16)
 
     let db_path = Path::new(&path);
 
+    /*
     let Ok(db_status) =
         DBStatus::activate(db_path.to_path_buf(), ActiveTask::MergeTags(tag1, tag2))
     else {
         println!("Database is busy! Aborting...");
         return -3;
-    };
+    }; */
 
-    if let Err(error) = merge_tags(db_path, tag1, tag2) {
+    if let Err(error) = merge_tags_wrapper(db_path, tag1, tag2) {
         println!("Error occured!\n{:?}", error);
 
-        db_status.deactivate();
+        //db_status.deactivate();
         return error.into_code();
     }
 
-    db_status.deactivate();
+    //db_status.deactivate();
 
     0
+}
+
+//
+
+//
+
+fn merge_tags_wrapper(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), DBError> {
+    let Ok(db_status) =
+        DBStatus::activate(db_path.to_path_buf(), ActiveTask::MergeTags(tag_1, tag_2))
+    else {
+        println!("Database is busy! Aborting...");
+        return Err(DBError::DataBaseBusy);
+    };
+
+    println!("Merging tags");
+    if let Err(error) = merge_tags(db_path, tag_1, tag_2) {
+        //println!("Error occured!\n{:?}", error);
+
+        db_status.deactivate();
+        return Err(error);
+    } // */
+    db_status.deactivate();
+
+    println!("Regenerating Tag sums");
+    if let Err(error) = regenerate_tag_sums(db_path) {
+        println!("Error occured! \n{:?}", error);
+        //db_status.deactivate();
+    }
+
+    println!("Regenerating Caches");
+    if let Err(error) = regenerate_caches(db_path) {
+        println!("Error occured!\n{:?}", error);
+
+        //db_status.deactivate();
+    }
+
+    Ok(())
 }
 
 //
@@ -224,8 +262,9 @@ pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16)
 Make sure to add a check when adding tags to fill out any potential empty space left by a
 merge.
 */
-fn merge_tags(db_path: &Path, tag1: u16, tag2: u16) -> Result<(), DBError> {
-    let tags = TagList::from_file(db_path)?;
+fn merge_tags(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), DBError> {
+    let mut tags = TagList::from_file(db_path)?;
+    tags.merge_tags(tag_1, tag_2)?;
 
     for path in WalkDir::new(db_path.join("data")) {
         let path = path.unwrap();
@@ -239,9 +278,15 @@ fn merge_tags(db_path: &Path, tag1: u16, tag2: u16) -> Result<(), DBError> {
             continue;
         }
 
-        let data_file = DataFile::read_from_file(filepath.to_path_buf())?;
-        data_file.save();
+        let mut data_file = DataFile::read_from_file(filepath.to_path_buf())?;
+
+        data_file.merge_tags(tag_1, tag_2);
+
+        data_file.save()?;
     }
+
+    //tags.save()?;
+
     /*
     Get tag ids for both tag1 and tag2.
 
@@ -325,7 +370,7 @@ pub unsafe extern "C" fn RenameTag(
 fn rename_tag(db_path: &Path, old_tag: String, new_tag: String) -> Result<(), DBError> {
     let mut tags = TagList::from_file(db_path)?;
     tags.rename_tag(old_tag, new_tag)?;
-    tags.save_to_file(db_path)
+    tags.save()
 }
 
 //
@@ -373,6 +418,8 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path: *const c_char) -> i32 
         println!("Error occured!\n{:?}", error);
         //return error.into_code();
     }
+
+    // TODO: Regenerate caches too!
 
     0
 }

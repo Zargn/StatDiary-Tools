@@ -1,4 +1,10 @@
-use std::{collections::HashMap, ffi::OsStr, io, path::Path};
+use std::{
+    collections::HashMap,
+    ffi::OsStr,
+    fs::{self, File},
+    io::{self, BufWriter, Write},
+    path::Path,
+};
 
 use walkdir::WalkDir;
 
@@ -44,6 +50,12 @@ impl Tags {
     fn add(&mut self, tag_id: u16) {
         *self.tags.entry(tag_id).or_default() += 1;
     }
+
+    fn to_sorted_vec(self) -> Vec<(u16, u16)> {
+        let mut tags: Vec<(u16, u16)> = self.tags.into_iter().collect();
+        tags.sort_by(|a, b| b.1.cmp(&a.1));
+        tags
+    }
 }
 
 pub fn regenerate_tag_sums(db_path: &Path) -> Result<()> {
@@ -78,6 +90,48 @@ pub fn regenerate_tag_sums(db_path: &Path) -> Result<()> {
         //println!("{:?}", filepath.file_stem());
     }
 
+    let stat_sums_path = db_path.join("stat_sums");
+    create_directory(&stat_sums_path)?;
+    write_to_file(general, &stat_sums_path.join("global_sums.txt"))?;
+
+    let time_sums_path = stat_sums_path.join("time");
+    time_stats(times, &time_sums_path)?;
+
+    let time_and_day_sums_path = stat_sums_path.join("time_and_day");
+    create_directory(&time_and_day_sums_path)?;
+    for (day_index, time_tags) in day_and_times.into_iter() {
+        time_stats(
+            time_tags,
+            &time_and_day_sums_path.join(weekday_str(day_index)),
+        )?;
+    }
+
+    Ok(())
+}
+
+fn time_stats(time_tags: HashMap<u8, Tags>, path: &Path) -> Result<()> {
+    create_directory(path)?;
+    for (hour, tags) in time_tags.into_iter() {
+        write_to_file(tags, &path.join(format!("{:02}.txt", hour)))?;
+    }
+    Ok(())
+}
+
+fn create_directory(path: &Path) -> Result<()> {
+    if let Err(e) = fs::create_dir(path) {
+        if e.kind() != io::ErrorKind::AlreadyExists {
+            return Err(DBAveragesError::IoError(e));
+        }
+    }
+    Ok(())
+}
+
+fn write_to_file(tags: Tags, file_path: &Path) -> Result<()> {
+    let mut writer = BufWriter::new(File::create(file_path)?);
+    for (tag_id, occurances) in tags.to_sorted_vec() {
+        writeln!(writer, "{} {}", occurances, tag_id)?;
+    }
+    writer.flush()?;
     Ok(())
 }
 
@@ -95,4 +149,18 @@ fn weekday_nr(filename: &str) -> Result<u8> {
         .ok_or_else(|| DBAveragesError::InvalidFileName(filename.to_string()))?
         .parse::<u8>()
         .map_err(|_| DBAveragesError::InvalidFileName(filename.to_string()))
+}
+
+fn weekday_str(day_index: u8) -> String {
+    let result = match day_index {
+        0 => "Monday",
+        1 => "Tuesday",
+        2 => "Wednesday",
+        3 => "Thursday",
+        4 => "Friday",
+        5 => "Saturday",
+        6 => "Sunday",
+        _ => "INVALID_DAY_INDEX",
+    };
+    result.to_string()
 }
