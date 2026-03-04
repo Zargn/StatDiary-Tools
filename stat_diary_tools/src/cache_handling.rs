@@ -6,7 +6,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{data_entry::DataEntry, utilities::read_sorted_directory, DATAFILEEXTENSION};
+use crate::{
+    data_entry::DataEntry, db_path::DataBasePath, utilities::read_sorted_directory,
+    DATAFILEEXTENSION,
+};
 
 #[derive(Debug)]
 pub enum RegenCachesError {
@@ -86,8 +89,8 @@ impl Overview {
 //
 
 /// Regenerates all caches in the provided database.
-pub fn regenerate_caches(db_path: &Path) -> Result<(), RegenCachesError> {
-    let data_path = Path::new(db_path).join("data");
+pub fn regenerate_caches(db_path: &DataBasePath) -> Result<(), RegenCachesError> {
+    let data_path = db_path.data();
 
     for year_folder in read_sorted_directory(&data_path)? {
         let mut result_writer = BufWriter::new(File::create(year_folder.join("year_cache.txt"))?);

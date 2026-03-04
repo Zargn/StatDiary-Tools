@@ -4,6 +4,8 @@ use std::{
     path::PathBuf,
 };
 
+use crate::db_path::DataBasePath;
+
 //
 
 //
@@ -77,7 +79,6 @@ impl ActiveTask {
 #[derive(Debug)]
 pub enum DBStatusError {
     Io(io::Error),
-    InvalidDataBasePath,
     DataBaseBusy(ActiveTask, DBStatus),
     MissingData,
     UnknownTask,
@@ -107,11 +108,8 @@ pub struct DBStatus {
 }
 
 impl DBStatus {
-    pub fn activate(db_path: PathBuf, task: ActiveTask) -> Result<DBStatus> {
-        if !db_path.exists() {
-            return Err(DBStatusError::InvalidDataBasePath);
-        }
-        let filepath = db_path.join(STATUSFILENAME);
+    pub fn activate(db_path: &DataBasePath, task: ActiveTask) -> Result<DBStatus> {
+        let filepath = db_path.root().join(STATUSFILENAME);
 
         let db_status = DBStatus {
             status_path: filepath.clone(),

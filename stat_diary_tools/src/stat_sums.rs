@@ -8,38 +8,7 @@ use std::{
 
 use walkdir::WalkDir;
 
-use crate::data_entry::DataEntry;
-
-/*
-#[derive(Debug)]
-pub enum DBAveragesError {
-    IoError(io::Error),
-    WalkDirError(walkdir::Error),
-    InvalidFileName(String),
-}*/
-
-/*
-impl From<io::Error> for DBAveragesError {
-    fn from(value: io::Error) -> Self {
-        Self::IoError(value)
-    }
-}
-
-impl From<walkdir::Error> for DBAveragesError {
-    fn from(value: walkdir::Error) -> Self {
-        Self::WalkDirError(value)
-    }
-}
-
-impl DBAveragesError {
-    pub fn into_code(self) -> i32 {
-        match self {
-            Self::IoError(_) => 1,
-            Self::WalkDirError(_) => 2,
-            Self::InvalidFileName(_) => 3,
-        }
-    }
-} */
+use crate::{data_entry::DataEntry, db_path::DataBasePath};
 
 #[derive(Debug)]
 pub enum StatSumsError {
@@ -79,12 +48,12 @@ impl Tags {
     }
 }
 
-pub fn regenerate_tag_sums(db_path: &Path) -> Result<()> {
+pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<()> {
     let mut general = Tags::default();
     let mut times: HashMap<u8, Tags> = HashMap::new();
     let mut day_and_times: HashMap<u8, HashMap<u8, Tags>> = HashMap::new();
 
-    for path in WalkDir::new(db_path.join("data")) {
+    for path in WalkDir::new(db_path.data()) {
         let path = path?;
         let filepath = path.path();
 
@@ -111,7 +80,7 @@ pub fn regenerate_tag_sums(db_path: &Path) -> Result<()> {
         //println!("{:?}", filepath.file_stem());
     }
 
-    let stat_sums_path = db_path.join("stat_sums");
+    let stat_sums_path = db_path.stat_sums();
     create_directory(&stat_sums_path)?;
     write_to_file(general, &stat_sums_path.join("global_sums.txt"))?;
 

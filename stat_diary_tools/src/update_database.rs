@@ -9,16 +9,17 @@ use std::{
 use walkdir::WalkDir;
 
 use crate::{
-    stat_sums::regenerate_tag_sums, tags::TagList, utilities::read_lines, DATAFILEEXTENSION,
+    db_path::DataBasePath, stat_sums::regenerate_tag_sums, tags::TagList, utilities::read_lines,
+    DATAFILEEXTENSION,
 };
 
-pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
+pub fn temporary_update_database(db_path: &DataBasePath) -> Result<(), Box<dyn Error>> {
     let mut tags: HashMap<String, u16> = HashMap::new();
 
     // Iterate through data_base/data/
     // Call transform_data_file on each of them.
 
-    for path in WalkDir::new(format!("{}/data", db_path)) {
+    for path in WalkDir::new(db_path.data()) {
         let path = path?;
         let path = path.path();
         if path.is_file() {
@@ -32,7 +33,7 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let Ok(tags_file) = File::create(format!("{}/tags.txt", db_path)) else {
+    let Ok(tags_file) = File::create(db_path.root().join("tags.txt")) else {
         // Could not create a new file! It might already exist, or there is some other issue.
         return Err("Could not create a new file!".into());
     };
@@ -45,7 +46,7 @@ pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {
 
     tags_writer.flush()?;
     //update_averages(Path::new(db_path))?;
-    if let Err(e) = regenerate_tag_sums(Path::new(db_path)) {
+    if let Err(e) = regenerate_tag_sums(db_path) {
         println!("regenerate_tag_sums error occured!\n{:?}", e);
     }
 
@@ -155,9 +156,9 @@ fn day_of_week(day_name: &str) -> u8 {
 
 //
 
-pub fn update_averages(db_path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn update_averages(db_path: &DataBasePath) -> Result<(), Box<dyn Error>> {
     let taglist = TagList::from_file(db_path).unwrap();
-    for path in WalkDir::new(db_path.join("averages")) {
+    for path in WalkDir::new(db_path.root().join("averages")) {
         let path = path?;
         if path.path().is_file() {
             println!("{:?}", path);

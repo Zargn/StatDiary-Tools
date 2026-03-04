@@ -9,6 +9,7 @@ use crate::{
     backup::{compress_to_image, load_image},
     cache_handling::regenerate_caches,
     data_entry::DataFile,
+    db_path::{DataBasePath, PtrToDBPathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
     stat_sums::regenerate_tag_sums,
     tags::{TagList, TagsError},
@@ -18,6 +19,7 @@ use crate::{
 mod backup;
 mod cache_handling;
 mod data_entry;
+mod db_path;
 mod db_status;
 mod stat_diary_error;
 mod stat_sums;
@@ -32,19 +34,25 @@ const DATAFILEEXTENSION: &str = "statdiary";
 
 #[no_mangle]
 pub unsafe extern "C" fn CompressDBToImage(
-    db_path: *const c_char,
+    db_path_ptr: *const c_char,
     result_path: *const c_char,
 ) -> i32 {
-    if db_path.is_null() || result_path.is_null() {
+    if result_path.is_null() {
         return -1;
     }
-    let db_path = unsafe { CStr::from_ptr(db_path).to_string_lossy() };
     let result_path = unsafe { CStr::from_ptr(result_path).to_string_lossy() };
 
-    if let Err(error) = compress_to_image(
-        Path::new(&db_path.to_string()),
-        Path::new(&result_path.to_string()),
-    ) {
+    let db_path = match DataBasePath::try_ptr_to_data_base_path(db_path_ptr) {
+        Ok(db_path) => db_path,
+        Err(PtrToDBPathError::NullPtr) => return -1,
+        Err(PtrToDBPathError::InvalidUTF8) => return -2,
+        Err(PtrToDBPathError::DataBasePath(dbp_error)) => match dbp_error {
+            db_path::DataBasePathError::DoesNotExist => return -3,
+            db_path::DataBasePathError::IsNotDataBase => return -4,
+        },
+    };
+
+    if let Err(error) = compress_to_image(&db_path, Path::new(&result_path.to_string())) {
         println!("Error occured! [{:?}]", error);
         return -2;
     }
@@ -93,19 +101,20 @@ pub unsafe extern "C" fn RegenerateCaches(db_path: *const c_char) -> i32 {
     }
     let db_path = unsafe { CStr::from_ptr(db_path) };
 
-    let Ok(path) = db_path.to_str() else {
+    let Ok(path_str) = db_path.to_str() else {
         return -2;
     };
 
-    let db_path = Path::new(path);
+    let Ok(db_path) = DataBasePath::new(Path::new(path_str).to_path_buf()) else {
+        return -3;
+    };
 
-    let Ok(db_status) = DBStatus::activate(db_path.to_path_buf(), ActiveTask::RegenerateCaches)
-    else {
+    let Ok(db_status) = DBStatus::activate(&db_path, ActiveTask::RegenerateCaches) else {
         println!("Database is busy! Aborting...");
         return -3;
     };
 
-    if let Err(error) = regenerate_caches(Path::new(path)) {
+    if let Err(error) = regenerate_caches(&db_path) {
         println!("Error occured!\n{:?}", error);
 
         db_status.deactivate();
@@ -129,12 +138,15 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
     }
     let db_path = unsafe { CStr::from_ptr(db_path) };
 
-    let Ok(path) = db_path.to_str() else {
+    let Ok(path_str) = db_path.to_str() else {
         return -2;
     };
 
-    let db_path = Path::new(path);
-    let activate_error = match DBStatus::activate(db_path.to_path_buf(), ActiveTask::None) {
+    let Ok(db_path) = DataBasePath::new(Path::new(path_str).to_path_buf()) else {
+        return -3;
+    };
+
+    let activate_error = match DBStatus::activate(&db_path, ActiveTask::None) {
         Ok(db_status) => {
             db_status.deactivate();
             return 0;
@@ -148,7 +160,7 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
 
     match active_task {
         ActiveTask::RegenerateCaches => {
-            if let Err(error) = regenerate_caches(Path::new(path)) {
+            if let Err(error) = regenerate_caches(&db_path) {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
@@ -157,7 +169,7 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
             }
         }
         ActiveTask::RegenerateTagSums => {
-            if let Err(error) = regenerate_tag_sums(Path::new(path)) {
+            if let Err(error) = regenerate_tag_sums(&db_path) {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
@@ -166,7 +178,7 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
             }
         }
         ActiveTask::MergeTags(tag_1, tag_2) => {
-            if let Err(error) = merge_tags(Path::new(path), tag_1, tag_2) {
+            if let Err(error) = merge_tags(&db_path, tag_1, tag_2) {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
@@ -175,7 +187,7 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
             }
         }
         ActiveTask::RenameTag(old_tag, new_tag) => {
-            if let Err(error) = rename_tag(Path::new(path), old_tag, new_tag) {
+            if let Err(error) = rename_tag(Path::new(path_str), old_tag, new_tag) {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
@@ -201,7 +213,13 @@ pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16)
         return -1;
     };
 
-    let db_path = Path::new(&path);
+    let Ok(path_str) = db_path.to_str() else {
+        return -2;
+    };
+
+    let Ok(db_path) = DataBasePath::new(Path::new(path_str).to_path_buf()) else {
+        return -3;
+    };
 
     /*
     let Ok(db_status) =
@@ -228,10 +246,8 @@ pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16)
 
 //
 
-fn merge_tags_wrapper(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
-    let Ok(db_status) =
-        DBStatus::activate(db_path.to_path_buf(), ActiveTask::MergeTags(tag_1, tag_2))
-    else {
+fn merge_tags_wrapper(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
+    let Ok(db_status) = DBStatus::activate(db_path, ActiveTask::MergeTags(tag_1, tag_2)) else {
         println!("Database is busy! Aborting...");
         return Err(TagsError::TagAlreadyExists);
         //return Err(DBError::DataBaseBusy);
@@ -270,11 +286,11 @@ fn merge_tags_wrapper(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), Tags
 Make sure to add a check when adding tags to fill out any potential empty space left by a
 merge.
 */
-fn merge_tags(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
+fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
     let mut tags = TagList::from_file(db_path)?;
     tags.merge_tags(tag_1, tag_2)?;
 
-    for path in WalkDir::new(db_path.join("data")) {
+    for path in WalkDir::new(db_path.data()) {
         let path = path.unwrap();
         let filepath = path.path();
 

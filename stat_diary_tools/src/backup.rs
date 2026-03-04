@@ -7,10 +7,12 @@ use walkdir::WalkDir;
 
 use zip::{result::ZipError, write::SimpleFileOptions, ZipArchive};
 
-pub fn compress_to_image(db_path: &Path, result_path: &Path) -> Result<(), Box<dyn Error>> {
+use crate::db_path::DataBasePath;
+
+pub fn compress_to_image(db_path: &DataBasePath, result_path: &Path) -> Result<(), Box<dyn Error>> {
     let method = zip::CompressionMethod::Ppmd;
 
-    let data = zip_dir(db_path, method)?;
+    let data = zip_dir(db_path.root(), method)?;
     convert_to_image(result_path, data);
 
     Ok(())

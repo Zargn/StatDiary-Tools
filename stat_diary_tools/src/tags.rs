@@ -5,38 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::utilities::read_lines;
-
-/*
-#[derive(Debug)]
-pub enum DBError {
-    IoError(io::Error),
-    CorruptedTagsFile(String),
-    UnknownTag(String),
-    UnknownId(u16),
-    TagAlreadyExists,
-    DataBaseBusy,
-} */
-
-/*
-impl From<io::Error> for DBError {
-    fn from(err: io::Error) -> Self {
-        Self::IoError(err)
-    }
-}
-
-impl DBError {
-    pub fn into_code(self) -> i32 {
-        match self {
-            Self::IoError(_) => 1,
-            Self::CorruptedTagsFile(_) => 2,
-            Self::UnknownTag(_) => 3,
-            Self::UnknownId(_) => 4,
-            Self::TagAlreadyExists => 5,
-            Self::DataBaseBusy => 6,
-        }
-    }
-} */
+use crate::{db_path::DataBasePath, utilities::read_lines};
 
 #[derive(Debug)]
 pub enum TagsError {
@@ -59,12 +28,12 @@ pub struct TagList {
     id_str_map: HashMap<u16, String>,
     str_id_map: HashMap<String, u16>,
     removed_ids: Vec<u16>,
-    db_path: PathBuf,
+    db_path: DataBasePath,
 }
 
 impl TagList {
-    pub fn from_file(db_path: &Path) -> Result<TagList> {
-        let filepath = db_path.join("tags.txt");
+    pub fn from_file(db_path: &DataBasePath) -> Result<TagList> {
+        let filepath = db_path.root().join("tags.txt");
 
         let mut id_str_map = HashMap::new();
         let mut str_id_map = HashMap::new();
@@ -97,7 +66,7 @@ impl TagList {
             id_str_map,
             str_id_map,
             removed_ids: Vec::new(),
-            db_path: db_path.to_path_buf(),
+            db_path: db_path.clone(),
         })
     }
 
@@ -178,8 +147,8 @@ impl TagList {
     //
 
     pub fn save(self) -> Result<()> {
-        let tmp_path = self.db_path.join("tags.txt.tmp");
-        let filepath = self.db_path.join("tags.txt");
+        let tmp_path = self.db_path.root().join("tags.txt.tmp");
+        let filepath = self.db_path.root().join("tags.txt");
 
         let mut writer = BufWriter::new(File::create(&tmp_path)?);
 
@@ -198,8 +167,8 @@ impl TagList {
     }
 
     fn save_removed_ids(&self) -> Result<()> {
-        let tmp_path = self.db_path.join("unused_tags.tags.tmp");
-        let filepath = self.db_path.join("unused_tags.tags");
+        let tmp_path = self.db_path.root().join("unused_tags.tags.tmp");
+        let filepath = self.db_path.root().join("unused_tags.tags");
 
         let mut writer = BufWriter::new(File::create(&tmp_path)?);
 
