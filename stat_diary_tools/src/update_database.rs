@@ -9,10 +9,7 @@ use std::{
 use walkdir::WalkDir;
 
 use crate::{
-    averages::{self, regenerate_tag_sums},
-    tags::TagList,
-    utilities::read_lines,
-    DATAFILEEXTENSION,
+    stat_sums::regenerate_tag_sums, tags::TagList, utilities::read_lines, DATAFILEEXTENSION,
 };
 
 pub fn temporary_update_database(db_path: &str) -> Result<(), Box<dyn Error>> {

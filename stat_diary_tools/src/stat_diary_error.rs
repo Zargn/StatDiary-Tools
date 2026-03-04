@@ -1,31 +1,21 @@
-use std::{io, path::PathBuf};
-
-use crate::db_status::{ActiveTask, DBStatus};
-
-#[derive(Debug)]
-pub enum DBStatusError {
-    InvalidDataBasePath,
-    IoError(io::Error),
-    DataBaseBusy(ActiveTask, DBStatus),
-    MissingData,
-    UnknownTask,
-}
-
+/*
 #[derive(Debug)]
 pub enum DBAveragesError {
     IoError(io::Error),
     WalkDirError(walkdir::Error),
     InvalidFileName(String),
-}
+} */
 
+/*
 #[derive(Debug)]
 pub enum RegenCachesError {
     InvalidRoot,
     IoError(io::Error),
     FoundUnknownFile(PathBuf),
     FoundUnknownFolder(PathBuf),
-}
+}*/
 
+/*
 #[derive(Debug)]
 pub enum DBError {
     IoError(io::Error),
@@ -34,7 +24,7 @@ pub enum DBError {
     UnknownId(u16),
     TagAlreadyExists,
     DataBaseBusy,
-}
+}*/
 
 /*
 TODO: Research good error design

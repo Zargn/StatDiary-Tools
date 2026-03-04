@@ -6,22 +6,21 @@ use std::{
 use walkdir::WalkDir;
 
 use crate::{
-    averages::regenerate_tag_sums,
     backup::{compress_to_image, load_image},
     cache_handling::regenerate_caches,
     data_entry::DataFile,
-    db_status::{ActiveTask, DBStatus},
-    stat_diary_error::{DBError, DBStatusError},
-    tags::TagList,
+    db_status::{ActiveTask, DBStatus, DBStatusError},
+    stat_sums::regenerate_tag_sums,
+    tags::{TagList, TagsError},
     update_database::temporary_update_database,
     utilities::try_ptr_to_string,
 };
-mod averages;
 mod backup;
 mod cache_handling;
 mod data_entry;
 mod db_status;
 mod stat_diary_error;
+mod stat_sums;
 mod tags;
 mod update_database;
 
@@ -110,7 +109,8 @@ pub unsafe extern "C" fn RegenerateCaches(db_path: *const c_char) -> i32 {
         println!("Error occured!\n{:?}", error);
 
         db_status.deactivate();
-        return error.into_code();
+        return -3;
+        //return error.into_code();
     }
 
     db_status.deactivate();
@@ -152,7 +152,8 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
-                return error.into_code();
+                return -3;
+                //return error.into_code();
             }
         }
         ActiveTask::RegenerateTagSums => {
@@ -160,7 +161,8 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
-                return error.into_code();
+                return -3;
+                //return error.into_code();
             }
         }
         ActiveTask::MergeTags(tag_1, tag_2) => {
@@ -168,7 +170,8 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
-                return error.into_code();
+                return -3;
+                //return error.into_code();
             }
         }
         ActiveTask::RenameTag(old_tag, new_tag) => {
@@ -176,7 +179,8 @@ pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
                 println!("Error occured!\n{:?}", error);
 
                 db_status.deactivate();
-                return error.into_code();
+                return -3;
+                //return error.into_code();
             }
         }
         ActiveTask::None => {}
@@ -211,7 +215,8 @@ pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16)
         println!("Error occured!\n{:?}", error);
 
         //db_status.deactivate();
-        return error.into_code();
+        return -3;
+        //return error.into_code();
     }
 
     //db_status.deactivate();
@@ -223,12 +228,13 @@ pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16)
 
 //
 
-fn merge_tags_wrapper(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), DBError> {
+fn merge_tags_wrapper(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
     let Ok(db_status) =
         DBStatus::activate(db_path.to_path_buf(), ActiveTask::MergeTags(tag_1, tag_2))
     else {
         println!("Database is busy! Aborting...");
-        return Err(DBError::DataBaseBusy);
+        return Err(TagsError::TagAlreadyExists);
+        //return Err(DBError::DataBaseBusy);
     };
 
     println!("Merging tags");
@@ -264,7 +270,7 @@ fn merge_tags_wrapper(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), DBEr
 Make sure to add a check when adding tags to fill out any potential empty space left by a
 merge.
 */
-fn merge_tags(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), DBError> {
+fn merge_tags(db_path: &Path, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
     let mut tags = TagList::from_file(db_path)?;
     tags.merge_tags(tag_1, tag_2)?;
 
@@ -329,7 +335,8 @@ pub unsafe extern "C" fn RegenerateTagSums(db_path: *const c_char) -> i32 {
     if let Err(error) = regenerate_tag_sums(db_path) {
         println!("Error occured! \n{:?}", error);
         db_status.deactivate();
-        return error.into_code();
+        return -3;
+        //return error.into_code();
     }
 
     db_status.deactivate();
@@ -359,7 +366,8 @@ pub unsafe extern "C" fn RenameTag(
 
     if let Err(error) = rename_tag(Path::new(&path), old_tag.to_string(), new_tag.to_string()) {
         println!("Error occured!\n{:?}", error);
-        return error.into_code();
+        return -3;
+        //return error.into_code();
     }
 
     0
@@ -369,7 +377,7 @@ pub unsafe extern "C" fn RenameTag(
 
 //
 
-fn rename_tag(db_path: &Path, old_tag: String, new_tag: String) -> Result<(), DBError> {
+fn rename_tag(db_path: &Path, old_tag: String, new_tag: String) -> Result<(), TagsError> {
     let mut tags = TagList::from_file(db_path)?;
     tags.rename_tag(old_tag, new_tag)?;
     tags.save()

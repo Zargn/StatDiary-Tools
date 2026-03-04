@@ -6,36 +6,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{
-    data_entry::DataEntry, stat_diary_error::RegenCachesError, utilities::read_sorted_directory,
-    DATAFILEEXTENSION,
-};
+use crate::{data_entry::DataEntry, utilities::read_sorted_directory, DATAFILEEXTENSION};
 
-/*
 #[derive(Debug)]
 pub enum RegenCachesError {
-    InvalidRoot,
-    IoError(io::Error),
+    Io(io::Error),
     FoundUnknownFile(PathBuf),
     FoundUnknownFolder(PathBuf),
-} */
-
-impl RegenCachesError {
-    pub fn into_code(self) -> i32 {
-        match self {
-            Self::InvalidRoot => 1,
-            Self::IoError(_) => 2,
-            Self::FoundUnknownFile(_) => 3,
-            Self::FoundUnknownFolder(_) => 4,
-        }
-    }
 }
 
 impl Display for RegenCachesError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Self::InvalidRoot => "Root directory does not exist!".to_string(),
-            Self::IoError(err) => format!("IoError: {err}"),
+            Self::Io(err) => format!("IoError: {err}"),
             Self::FoundUnknownFile(path) => format!("Found unknown file: {path:?}"),
             Self::FoundUnknownFolder(path) => format!("Found unknown folder: {path:?}"),
         };
@@ -46,7 +29,7 @@ impl Display for RegenCachesError {
 impl From<io::Error> for RegenCachesError {
     fn from(io_err: io::Error) -> Self {
         println!("io_err: {}", io_err);
-        Self::IoError(io_err)
+        Self::Io(io_err)
     }
 }
 
@@ -104,10 +87,6 @@ impl Overview {
 
 /// Regenerates all caches in the provided database.
 pub fn regenerate_caches(db_path: &Path) -> Result<(), RegenCachesError> {
-    if !db_path.exists() {
-        return Err(RegenCachesError::InvalidRoot);
-    }
-
     let data_path = Path::new(db_path).join("data");
 
     for year_folder in read_sorted_directory(&data_path)? {

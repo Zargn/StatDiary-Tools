@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{stat_diary_error::DBError, utilities::read_lines};
+use crate::utilities::read_lines;
 
 /*
 #[derive(Debug)]
@@ -18,6 +18,7 @@ pub enum DBError {
     DataBaseBusy,
 } */
 
+/*
 impl From<io::Error> for DBError {
     fn from(err: io::Error) -> Self {
         Self::IoError(err)
@@ -35,9 +36,24 @@ impl DBError {
             Self::DataBaseBusy => 6,
         }
     }
+} */
+
+#[derive(Debug)]
+pub enum TagsError {
+    Io(io::Error),
+    CorruptedTagsFile(String),
+    UnknownTag(String),
+    UnknownId(u16),
+    TagAlreadyExists,
 }
 
-type Result<T> = std::result::Result<T, DBError>;
+impl From<io::Error> for TagsError {
+    fn from(err: io::Error) -> Self {
+        Self::Io(err)
+    }
+}
+
+type Result<T> = std::result::Result<T, TagsError>;
 
 pub struct TagList {
     id_str_map: HashMap<u16, String>,
@@ -57,22 +73,22 @@ impl TagList {
             let (id, tag) = (
                 parts
                     .next()
-                    .ok_or(DBError::CorruptedTagsFile(line.clone()))?
+                    .ok_or(TagsError::CorruptedTagsFile(line.clone()))?
                     .parse::<u16>()
-                    .map_err(|_| DBError::CorruptedTagsFile(line.clone()))?,
+                    .map_err(|_| TagsError::CorruptedTagsFile(line.clone()))?,
                 parts
                     .next()
-                    .ok_or(DBError::CorruptedTagsFile(line.clone()))?,
+                    .ok_or(TagsError::CorruptedTagsFile(line.clone()))?,
             );
 
             if str_id_map.insert(tag.to_string(), id).is_some() {
-                return Err(DBError::CorruptedTagsFile(
+                return Err(TagsError::CorruptedTagsFile(
                     "Duplicate tags found in tags file!".to_string(),
                 ));
             }
 
             if id_str_map.insert(id, tag.to_string()).is_some() {
-                return Err(DBError::CorruptedTagsFile(
+                return Err(TagsError::CorruptedTagsFile(
                     "Duplicate tag ids found in tags file!".to_string(),
                 ));
             }
@@ -92,7 +108,7 @@ impl TagList {
     pub fn get_id(&self, tag: &str) -> Result<&u16> {
         self.str_id_map
             .get(tag)
-            .ok_or(DBError::UnknownTag(tag.to_string()))
+            .ok_or(TagsError::UnknownTag(tag.to_string()))
     }
 
     //
@@ -102,7 +118,7 @@ impl TagList {
     pub fn get_tag(&self, tag_id: u16) -> Result<&String> {
         self.id_str_map
             .get(&tag_id)
-            .ok_or(DBError::UnknownId(tag_id))
+            .ok_or(TagsError::UnknownId(tag_id))
     }
 
     //
@@ -113,10 +129,10 @@ impl TagList {
         let tag_str = self
             .id_str_map
             .remove(&tag_id)
-            .ok_or(DBError::UnknownId(tag_id))?;
+            .ok_or(TagsError::UnknownId(tag_id))?;
         self.str_id_map
             .remove(&tag_str)
-            .ok_or(DBError::UnknownTag(tag_str))?;
+            .ok_or(TagsError::UnknownTag(tag_str))?;
 
         self.removed_ids.push(tag_id);
         Ok(())
@@ -132,11 +148,11 @@ impl TagList {
 
         //println!("old-tag: {}, new-tag: {}", old_tag, new_tag);
         if self.str_id_map.contains_key(&new_tag) {
-            return Err(DBError::TagAlreadyExists);
+            return Err(TagsError::TagAlreadyExists);
         }
 
         let Some(tag_id) = self.str_id_map.remove(&old_tag) else {
-            return Err(DBError::UnknownTag(old_tag));
+            return Err(TagsError::UnknownTag(old_tag));
         };
 
         self.str_id_map.insert(new_tag.clone(), tag_id);

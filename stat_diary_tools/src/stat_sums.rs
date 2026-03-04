@@ -8,7 +8,7 @@ use std::{
 
 use walkdir::WalkDir;
 
-use crate::{data_entry::DataEntry, stat_diary_error::DBAveragesError};
+use crate::data_entry::DataEntry;
 
 /*
 #[derive(Debug)]
@@ -18,6 +18,7 @@ pub enum DBAveragesError {
     InvalidFileName(String),
 }*/
 
+/*
 impl From<io::Error> for DBAveragesError {
     fn from(value: io::Error) -> Self {
         Self::IoError(value)
@@ -38,9 +39,28 @@ impl DBAveragesError {
             Self::InvalidFileName(_) => 3,
         }
     }
+} */
+
+#[derive(Debug)]
+pub enum StatSumsError {
+    Io(io::Error),
+    WalkDir(walkdir::Error),
+    InvalidFileName(String),
 }
 
-type Result<T> = std::result::Result<T, DBAveragesError>;
+impl From<io::Error> for StatSumsError {
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+impl From<walkdir::Error> for StatSumsError {
+    fn from(value: walkdir::Error) -> Self {
+        Self::WalkDir(value)
+    }
+}
+
+type Result<T> = std::result::Result<T, StatSumsError>;
 
 #[derive(Debug, Default)]
 struct Tags {
@@ -121,7 +141,7 @@ fn time_stats(time_tags: HashMap<u8, Tags>, path: &Path) -> Result<()> {
 fn create_directory(path: &Path) -> Result<()> {
     if let Err(e) = fs::create_dir(path) {
         if e.kind() != io::ErrorKind::AlreadyExists {
-            return Err(DBAveragesError::IoError(e));
+            return Err(StatSumsError::Io(e));
         }
     }
     Ok(())
@@ -140,16 +160,16 @@ fn filename(filepath: &Path) -> Result<&str> {
     filepath
         .file_stem()
         .and_then(|s| s.to_str())
-        .ok_or_else(|| DBAveragesError::InvalidFileName(format!("{:?}", filepath)))
+        .ok_or_else(|| StatSumsError::InvalidFileName(format!("{:?}", filepath)))
 }
 
 fn weekday_nr(filename: &str) -> Result<u8> {
     filename
         .split('-')
         .nth(1)
-        .ok_or_else(|| DBAveragesError::InvalidFileName(filename.to_string()))?
+        .ok_or_else(|| StatSumsError::InvalidFileName(filename.to_string()))?
         .parse::<u8>()
-        .map_err(|_| DBAveragesError::InvalidFileName(filename.to_string()))
+        .map_err(|_| StatSumsError::InvalidFileName(filename.to_string()))
 }
 
 fn weekday_str(day_index: u8) -> String {
