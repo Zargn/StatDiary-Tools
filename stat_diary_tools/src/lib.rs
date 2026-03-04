@@ -1,22 +1,17 @@
-use std::{
-    ffi::{c_char, CStr, OsStr},
-    path::Path,
-};
+use std::ffi::OsStr;
 
 use walkdir::WalkDir;
 
 use crate::{
-    backup::{compress_to_image, load_image},
     cache_handling::regenerate_caches,
     data_entry::DataFile,
-    db_path::{DataBasePath, PtrToDBPathError},
-    db_status::{ActiveTask, DBStatus, DBStatusError},
+    db_path::DataBasePath,
+    db_status::{ActiveTask, DBStatus},
     stat_sums::regenerate_tag_sums,
     tags::{TagList, TagsError},
-    update_database::temporary_update_database,
-    utilities::try_ptr_to_string,
 };
 mod backup;
+pub mod c_wrapper;
 mod cache_handling;
 mod data_entry;
 mod db_path;
@@ -27,220 +22,6 @@ mod tags;
 mod update_database;
 
 const DATAFILEEXTENSION: &str = "statdiary";
-
-//
-
-//
-
-#[no_mangle]
-pub unsafe extern "C" fn CompressDBToImage(
-    db_path_ptr: *const c_char,
-    result_path: *const c_char,
-) -> i32 {
-    if result_path.is_null() {
-        return -1;
-    }
-    let result_path = unsafe { CStr::from_ptr(result_path).to_string_lossy() };
-
-    let db_path = match DataBasePath::try_ptr_to_data_base_path(db_path_ptr) {
-        Ok(db_path) => db_path,
-        Err(PtrToDBPathError::NullPtr) => return -1,
-        Err(PtrToDBPathError::InvalidUTF8) => return -2,
-        Err(PtrToDBPathError::DataBasePath(dbp_error)) => match dbp_error {
-            db_path::DataBasePathError::DoesNotExist => return -3,
-            db_path::DataBasePathError::IsNotDataBase => return -4,
-        },
-    };
-
-    if let Err(error) = compress_to_image(&db_path, Path::new(&result_path.to_string())) {
-        println!("Error occured! [{:?}]", error);
-        return -2;
-    }
-
-    //compress_db_to_image(&db_path, &result_path);
-
-    1
-}
-
-//
-
-//
-
-#[no_mangle]
-pub unsafe extern "C" fn ExtractDBFromImage(
-    result_db_path: *const c_char,
-    db_image_path: *const c_char,
-) -> i32 {
-    if result_db_path.is_null() || db_image_path.is_null() {
-        return -1;
-    }
-    let result_db_path = unsafe { CStr::from_ptr(result_db_path).to_string_lossy() };
-    let db_image_path = unsafe { CStr::from_ptr(db_image_path).to_string_lossy() };
-
-    if let Err(error) = load_image(
-        Path::new(&result_db_path.to_string()),
-        Path::new(&db_image_path.to_string()),
-    ) {
-        println!("Error occured! [{:?}]", error);
-        return -2;
-    }
-
-    //compress_db_to_image(&db_path, &result_path);
-
-    1
-}
-
-//
-
-//
-
-#[no_mangle]
-pub unsafe extern "C" fn RegenerateCaches(db_path: *const c_char) -> i32 {
-    if db_path.is_null() {
-        return -1;
-    }
-    let db_path = unsafe { CStr::from_ptr(db_path) };
-
-    let Ok(path_str) = db_path.to_str() else {
-        return -2;
-    };
-
-    let Ok(db_path) = DataBasePath::new(Path::new(path_str).to_path_buf()) else {
-        return -3;
-    };
-
-    let Ok(db_status) = DBStatus::activate(&db_path, ActiveTask::RegenerateCaches) else {
-        println!("Database is busy! Aborting...");
-        return -3;
-    };
-
-    if let Err(error) = regenerate_caches(&db_path) {
-        println!("Error occured!\n{:?}", error);
-
-        db_status.deactivate();
-        return -3;
-        //return error.into_code();
-    }
-
-    db_status.deactivate();
-
-    0
-}
-
-//
-
-//
-
-#[no_mangle]
-pub unsafe extern "C" fn ResumeTask(db_path: *const c_char) -> i32 {
-    if db_path.is_null() {
-        return -1;
-    }
-    let db_path = unsafe { CStr::from_ptr(db_path) };
-
-    let Ok(path_str) = db_path.to_str() else {
-        return -2;
-    };
-
-    let Ok(db_path) = DataBasePath::new(Path::new(path_str).to_path_buf()) else {
-        return -3;
-    };
-
-    let activate_error = match DBStatus::activate(&db_path, ActiveTask::None) {
-        Ok(db_status) => {
-            db_status.deactivate();
-            return 0;
-        }
-        Err(db_error) => db_error,
-    };
-
-    let DBStatusError::DataBaseBusy(active_task, db_status) = activate_error else {
-        return -3;
-    };
-
-    match active_task {
-        ActiveTask::RegenerateCaches => {
-            if let Err(error) = regenerate_caches(&db_path) {
-                println!("Error occured!\n{:?}", error);
-
-                db_status.deactivate();
-                return -3;
-                //return error.into_code();
-            }
-        }
-        ActiveTask::RegenerateTagSums => {
-            if let Err(error) = regenerate_tag_sums(&db_path) {
-                println!("Error occured!\n{:?}", error);
-
-                db_status.deactivate();
-                return -3;
-                //return error.into_code();
-            }
-        }
-        ActiveTask::MergeTags(tag_1, tag_2) => {
-            if let Err(error) = merge_tags(&db_path, tag_1, tag_2) {
-                println!("Error occured!\n{:?}", error);
-
-                db_status.deactivate();
-                return -3;
-                //return error.into_code();
-            }
-        }
-        ActiveTask::RenameTag(old_tag, new_tag) => {
-            if let Err(error) = rename_tag(Path::new(path_str), old_tag, new_tag) {
-                println!("Error occured!\n{:?}", error);
-
-                db_status.deactivate();
-                return -3;
-                //return error.into_code();
-            }
-        }
-        ActiveTask::None => {}
-    }
-
-    db_status.deactivate();
-
-    0
-}
-
-//
-
-//
-
-#[no_mangle]
-pub unsafe extern "C" fn MergeTags(db_path: *const c_char, tag1: u16, tag2: u16) -> i32 {
-    let Ok(path) = try_ptr_to_string(db_path) else {
-        return -1;
-    };
-
-    let Ok(path_str) = db_path.to_str() else {
-        return -2;
-    };
-
-    let Ok(db_path) = DataBasePath::new(Path::new(path_str).to_path_buf()) else {
-        return -3;
-    };
-
-    /*
-    let Ok(db_status) =
-        DBStatus::activate(db_path.to_path_buf(), ActiveTask::MergeTags(tag1, tag2))
-    else {
-        println!("Database is busy! Aborting...");
-        return -3;
-    }; */
-
-    if let Err(error) = merge_tags_wrapper(db_path, tag1, tag2) {
-        println!("Error occured!\n{:?}", error);
-
-        //db_status.deactivate();
-        return -3;
-        //return error.into_code();
-    }
-
-    //db_status.deactivate();
-
-    0
-}
 
 //
 
@@ -329,71 +110,7 @@ fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), Tags
 
     Ok(())
 }
-
-//
-
-//
-
-#[no_mangle]
-pub unsafe extern "C" fn RegenerateTagSums(db_path: *const c_char) -> i32 {
-    let Ok(path) = try_ptr_to_string(db_path) else {
-        return -1;
-    };
-
-    let db_path = Path::new(&path);
-
-    let Ok(db_status) = DBStatus::activate(db_path.to_path_buf(), ActiveTask::RegenerateTagSums)
-    else {
-        println!("Database is busy! Aborting...");
-        return -3;
-    };
-
-    if let Err(error) = regenerate_tag_sums(db_path) {
-        println!("Error occured! \n{:?}", error);
-        db_status.deactivate();
-        return -3;
-        //return error.into_code();
-    }
-
-    db_status.deactivate();
-
-    0
-}
-
-//
-
-//
-
-#[no_mangle]
-pub unsafe extern "C" fn RenameTag(
-    db_path: *const c_char,
-    old_tag: *const c_char,
-    new_tag: *const c_char,
-) -> i32 {
-    let Ok(path) = try_ptr_to_string(db_path) else {
-        return -1;
-    };
-    let Ok(old_tag) = try_ptr_to_string(old_tag) else {
-        return -2;
-    };
-    let Ok(new_tag) = try_ptr_to_string(new_tag) else {
-        return -3;
-    };
-
-    if let Err(error) = rename_tag(Path::new(&path), old_tag.to_string(), new_tag.to_string()) {
-        println!("Error occured!\n{:?}", error);
-        return -3;
-        //return error.into_code();
-    }
-
-    0
-}
-
-//
-
-//
-
-fn rename_tag(db_path: &Path, old_tag: String, new_tag: String) -> Result<(), TagsError> {
+fn rename_tag(db_path: &DataBasePath, old_tag: String, new_tag: String) -> Result<(), TagsError> {
     let mut tags = TagList::from_file(db_path)?;
     tags.rename_tag(old_tag, new_tag)?;
     tags.save()
@@ -434,21 +151,6 @@ while if it was translated to raw bytes it would only require 11 bytes.
 
 Make sure to call RegenerateCaches after this to create all the caches in the correct folders.
 */
-#[no_mangle]
-pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path: *const c_char) -> i32 {
-    let Ok(path) = try_ptr_to_string(db_path) else {
-        return -1;
-    };
-
-    if let Err(error) = temporary_update_database(&path) {
-        println!("Error occured!\n{:?}", error);
-        //return error.into_code();
-    }
-
-    // TODO: Regenerate caches too!
-
-    0
-}
 
 //
 
@@ -456,7 +158,6 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path: *const c_char) -> i32 
 
 mod utilities {
     use std::{
-        ffi::{c_char, CStr},
         fs::{self, File},
         io::{self, BufRead},
         path::{Path, PathBuf},
@@ -473,21 +174,6 @@ mod utilities {
         Ok(io::BufReader::new(File::open(path)?)
             .lines()
             .map_while(Result::ok))
-    }
-
-    //
-
-    //
-
-    pub unsafe fn try_ptr_to_string(ptr: *const c_char) -> Result<String, i32> {
-        if ptr.is_null() {
-            return Err(-1);
-        }
-        let cstr = unsafe { CStr::from_ptr(ptr) };
-        let Ok(str) = cstr.to_str() else {
-            return Err(-2);
-        };
-        Ok(str.to_string())
     }
 
     //

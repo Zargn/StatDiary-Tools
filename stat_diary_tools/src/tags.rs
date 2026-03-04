@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{self, BufWriter, Read, Write},
-    path::{Path, PathBuf},
 };
 
 use crate::{db_path::DataBasePath, utilities::read_lines};
