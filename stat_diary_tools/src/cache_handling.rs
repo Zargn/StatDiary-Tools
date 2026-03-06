@@ -1,86 +1,89 @@
 use std::{
     collections::HashSet,
-    fmt::Display,
+    ffi::OsStr,
     fs::File,
     io::{self, BufWriter, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
+
+use log::warn;
 
 use crate::{
     data_entry::DataEntry, db_path::DataBasePath, utilities::read_sorted_directory,
     DATAFILEEXTENSION,
 };
 
-#[derive(Debug)]
-pub enum RegenCachesError {
-    Io(io::Error),
-    FoundUnknownFile(PathBuf),
-    FoundUnknownFolder(PathBuf),
+//
+
+//
+
+#[derive(Debug, Clone)]
+struct ScoreAvg {
+    min: u8,
+    max: u8,
+    total: u16,
+    count: u16,
 }
 
-impl Display for RegenCachesError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Self::Io(err) => format!("IoError: {err}"),
-            Self::FoundUnknownFile(path) => format!("Found unknown file: {path:?}"),
-            Self::FoundUnknownFolder(path) => format!("Found unknown folder: {path:?}"),
-        };
-        write!(f, "{}", s)
+impl Default for ScoreAvg {
+    fn default() -> Self {
+        ScoreAvg {
+            min: u8::MAX,
+            max: 0,
+            total: 0,
+            count: 0,
+        }
     }
 }
 
-impl From<io::Error> for RegenCachesError {
-    fn from(io_err: io::Error) -> Self {
-        println!("io_err: {}", io_err);
-        Self::Io(io_err)
+impl ScoreAvg {
+    fn add(&mut self, score: u8) {
+        self.min = self.min.min(score);
+        self.max = self.max.max(score);
+        self.total += score as u16;
+        self.count += 1;
+    }
+    fn avg(&self) -> f32 {
+        self.total as f32 / self.count as f32
+    }
+    fn merge(&mut self, other: &ScoreAvg) {
+        self.min = self.min.min(other.min);
+        self.max = self.max.max(other.max);
+        self.total += other.total;
+        self.count += other.count;
     }
 }
 
-//
-
-//
-
-struct ScoreAverages {
-    avg_mental: f32,
-    avg_physical: f32,
-}
-
-impl ScoreAverages {
-    fn to_data_str(&self) -> String {
-        format!("{} | {}", self.avg_mental, self.avg_physical)
-    }
-}
-
-//
-
-//
-
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct Overview {
-    min_m_score: u8,
-    max_m_score: u8,
-    avg_m_score: f32,
-    min_p_score: u8,
-    max_p_score: u8,
-    avg_p_score: f32,
-    tags: Vec<u16>,
+    m_score: ScoreAvg,
+    p_score: ScoreAvg,
+    tags: HashSet<u16>,
 }
 
 impl Overview {
     fn to_data_str(&self) -> String {
         let mut data_str = format!(
             "{} {} {} | {} {} {} |",
-            self.min_m_score,
-            self.max_m_score,
-            self.avg_m_score,
-            self.min_p_score,
-            self.max_p_score,
-            self.avg_p_score
+            self.m_score.min,
+            self.m_score.max,
+            self.m_score.avg(),
+            self.p_score.min,
+            self.p_score.max,
+            self.p_score.avg()
         );
         for tag in &self.tags {
             data_str.push_str(&format!(" {}", tag));
         }
         data_str
+    }
+
+    fn merge(&mut self, other: &Overview) {
+        for tag in &other.tags {
+            self.tags.insert(*tag);
+        }
+        self.m_score.merge(&other.m_score);
+        self.p_score.merge(&other.p_score);
     }
 }
 
@@ -88,44 +91,72 @@ impl Overview {
 
 //
 
+// TODO ############################################################ TODO
+// Better checks to ensure a year folder is actually a valid year folder?
+
 /// Regenerates all caches in the provided database.
-pub fn regenerate_caches(db_path: &DataBasePath) -> Result<(), RegenCachesError> {
-    let data_path = db_path.data();
+pub fn regenerate_caches(db_path: &DataBasePath) -> Result<(), io::Error> {
+    log::info!("Regenerating caches...");
+    for year_path in read_sorted_directory(&db_path.data())? {
+        if year_path.is_file() {
+            warn!(
+                "Encountered unexpected file in data folder! {:?}",
+                year_path
+            );
+            continue;
+        }
 
-    for year_folder in read_sorted_directory(&data_path)? {
-        let mut result_writer = BufWriter::new(File::create(year_folder.join("year_cache.txt"))?);
-        for month_folder in read_sorted_directory(&year_folder)? {
-            if month_folder.is_file() {
-                if month_folder != year_folder.join("year_cache.txt") {
-                    return Err(RegenCachesError::FoundUnknownFile(month_folder));
-                }
+        let mut result_writer = BufWriter::new(File::create(year_path.join("year_cache.txt"))?);
+        for month_path in read_sorted_directory(&year_path)? {
+            let Ok(month_index) = is_month_folder(&month_path) else {
                 continue;
-            }
-
-            let Ok(folder_id) = month_folder
-                .file_name()
-                .ok_or(RegenCachesError::FoundUnknownFolder(month_folder.clone()))?
-                .to_string_lossy()
-                .parse::<u8>()
-            else {
-                return Err(RegenCachesError::FoundUnknownFolder(month_folder));
             };
-            if !(1..=12).contains(&folder_id) {
-                return Err(RegenCachesError::FoundUnknownFolder(month_folder));
-            }
 
-            let avg_month_scores = create_month_cache(&month_folder)?;
+            let avg_month_scores = create_month_cache(&month_path)?;
             writeln!(
                 result_writer,
-                "{:?} | {}",
-                folder_id,
+                "{} | {}",
+                month_index,
                 avg_month_scores.to_data_str(),
             )?;
         }
+        log::info!("Created year cache: {:?}", year_path.join("year_cache.txt"));
         result_writer.flush()?;
     }
 
     Ok(())
+}
+
+//
+
+//
+
+/// Returns a u8 representing the month index in the name of the provided folder IF it is a folder
+/// and has a filename that can be parsed into a valid u8 month index. (To be valid it has to be
+/// between 1..=12)
+fn is_month_folder(month_path: &Path) -> Result<u8, ()> {
+    if month_path.is_file() {
+        if month_path.file_name() != Some(OsStr::new("year_cache.txt")) {
+            warn!("Ignoring unexpected file in year folder: {:?}", month_path);
+        }
+        return Err(());
+    }
+
+    let Some(folder_name) = month_path.file_name() else {
+        warn!("Ignoring folder without name. {:?}", month_path);
+        return Err(());
+    };
+
+    let Ok(month_index) = folder_name.to_string_lossy().parse::<u8>() else {
+        warn!("Ignoring folder with invalid name: {:?}", month_path);
+        return Err(());
+    };
+
+    if !(1..=12).contains(&month_index) {
+        warn!("Ignoring folder with invalid month index! {}", month_index);
+        return Err(());
+    }
+    Ok(month_index)
 }
 
 //
@@ -138,66 +169,36 @@ pub fn regenerate_caches(db_path: &DataBasePath) -> Result<(), RegenCachesError>
 ///
 /// If a month_cache.txt file already exists then it gets overwritten.
 ///
-/// Returns the average m and p score for this month.
-fn create_month_cache(month_folder: &Path) -> Result<ScoreAverages, RegenCachesError> {
+/// Returns a overview over all days in this month.
+fn create_month_cache(month_folder: &Path) -> Result<Overview, io::Error> {
     let mut result_writer = BufWriter::new(File::create(month_folder.join("month_cache.txt"))?);
 
-    let mut month_count = 0;
-    let mut month_m_score_sum = 0.0;
-    let mut month_p_score_sum = 0.0;
+    let mut month_overview = Overview::default();
 
     for file in read_sorted_directory(month_folder)? {
-        if file.is_dir() {
-            return Err(RegenCachesError::FoundUnknownFolder(file));
-        }
-
-        if file == month_folder.join("month_cache.txt") {
+        if !is_data_file(&file) {
             continue;
         }
 
-        if file
-            .extension()
-            .ok_or(RegenCachesError::FoundUnknownFile(file.clone()))?
-            .to_string_lossy()
-            != DATAFILEEXTENSION
-        {
-            return Err(RegenCachesError::FoundUnknownFile(file));
-        }
+        let Some(filename) = file.file_name() else {
+            warn!("Skipping data file without name: {:?}", file);
+            continue;
+        };
 
         let mut overview = Overview::default();
 
         let data_entries = DataEntry::read_from_file(&file)?;
-        let entry_count = data_entries.len();
 
-        let mut m_score_sum: f32 = 0.0;
-        let mut p_score_sum: f32 = 0.0;
-        let mut tags = HashSet::new();
         for data in data_entries {
-            m_score_sum += data.mental_score as f32;
-            p_score_sum += data.physical_score as f32;
-
-            overview.min_m_score = overview.min_m_score.min(data.mental_score);
-            overview.max_m_score = overview.max_m_score.max(data.mental_score);
-            overview.min_p_score = overview.min_p_score.min(data.physical_score);
-            overview.max_p_score = overview.max_p_score.max(data.physical_score);
+            overview.m_score.add(data.mental_score);
+            overview.p_score.add(data.physical_score);
 
             for tag in data.tags {
-                tags.insert(tag);
+                overview.tags.insert(tag);
             }
         }
 
-        overview.avg_m_score = m_score_sum / entry_count as f32;
-        overview.avg_p_score = p_score_sum / entry_count as f32;
-
-        overview.tags = Vec::from_iter(tags);
-
-        month_m_score_sum += overview.avg_m_score;
-        month_p_score_sum += overview.avg_p_score;
-        month_count += 1;
-
-        let filename = file
-            .file_name()
-            .ok_or(RegenCachesError::FoundUnknownFile(file.clone()))?;
+        month_overview.merge(&overview);
 
         writeln!(
             result_writer,
@@ -207,10 +208,42 @@ fn create_month_cache(month_folder: &Path) -> Result<ScoreAverages, RegenCachesE
         )?;
     }
 
+    log::info!(
+        "Created month cache: {:?}",
+        month_folder.join("month_cache.txt")
+    );
     result_writer.flush()?;
 
-    Ok(ScoreAverages {
-        avg_mental: month_m_score_sum / month_count as f32,
-        avg_physical: month_p_score_sum / month_count as f32,
-    })
+    Ok(month_overview)
+}
+
+//
+
+//
+
+/// Returns true if the proivded file is a data file and false if it isn't.
+/// Will log the reason a file is decided to not be a data file to the logger.
+/// If a non-datafile of expected name is encountered this will return false without
+/// logging the reason.
+fn is_data_file(file: &Path) -> bool {
+    if file.is_dir() {
+        warn!("Ignoring unexpected directory in month folder! {:?}", file);
+        return false;
+    }
+
+    // Don't give warning for expected non-data files
+    if file.file_name() == Some(OsStr::new("month_cache.txt")) {
+        return false;
+    }
+
+    let Some(file_extension) = file.extension() else {
+        warn!("Ignoring file due to missing file extension! {:?}", file);
+        return false;
+    };
+
+    if file_extension != DATAFILEEXTENSION {
+        warn!("Ignoring file: {:?}", file);
+        return false;
+    }
+    true
 }
