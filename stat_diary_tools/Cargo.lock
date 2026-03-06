@@ -1089,6 +1089,7 @@ name = "stat_diary_tools"
 version = "0.1.0"
 dependencies = [
  "image",
+ "log",
  "walkdir",
  "zip",
 ]
