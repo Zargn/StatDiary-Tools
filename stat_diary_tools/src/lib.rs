@@ -1,11 +1,11 @@
 use std::{ffi::OsStr, io};
 
-use log::{LevelFilter, SetLoggerError};
+use log::{error, LevelFilter, SetLoggerError};
 use walkdir::WalkDir;
 
 use crate::{
     cache_handling::regenerate_caches,
-    data_entry::DataFile,
+    data_entry::{DataFile, ReadDataFileError},
     db_path::DataBasePath,
     db_status::{ActiveTask, DBStatus, DBStatusError},
     logger::DBLogger,
@@ -101,7 +101,14 @@ fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), Tags
             continue;
         }
 
-        let mut data_file = DataFile::read_from_file(filepath.to_path_buf())?;
+        let mut data_file = match DataFile::read_from_file(filepath) {
+            Ok(data_file) => data_file,
+            Err(ReadDataFileError::CorruptedDataFile) => {
+                error!("Data file [{:?}] is corrupted! This file will not be represented in the cache!", filepath);
+                continue;
+            }
+            Err(ReadDataFileError::Io(io_err)) => return Err(TagsError::Io(io_err)),
+        };
 
         data_file.merge_tags(tag_1, tag_2);
 

@@ -6,9 +6,13 @@ use std::{
     path::Path,
 };
 
+use log::error;
 use walkdir::WalkDir;
 
-use crate::{data_entry::DataEntry, db_path::DataBasePath};
+use crate::{
+    data_entry::{DataFile, ReadDataFileError},
+    db_path::DataBasePath,
+};
 
 #[derive(Debug)]
 pub enum StatSumsError {
@@ -69,11 +73,20 @@ pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<()> {
 
         let weekday_times = day_and_times.entry(weekday_nr(filename)?).or_default();
 
-        for data_entry in DataEntry::read_from_file(filepath)? {
-            for tag in data_entry.tags {
-                general.add(tag);
-                times.entry(data_entry.hour).or_default().add(tag);
-                weekday_times.entry(data_entry.hour).or_default().add(tag);
+        let data_file = match DataFile::read_from_file(filepath) {
+            Ok(data_file) => data_file,
+            Err(ReadDataFileError::CorruptedDataFile) => {
+                error!("Data file [{:?}] is corrupted! This file will not be represented in the stat sums!", filepath);
+                continue;
+            }
+            Err(ReadDataFileError::Io(io_err)) => return Err(StatSumsError::Io(io_err)),
+        };
+
+        for data_entry in data_file.entries() {
+            for tag in &data_entry.tags {
+                general.add(*tag);
+                times.entry(data_entry.hour).or_default().add(*tag);
+                weekday_times.entry(data_entry.hour).or_default().add(*tag);
             }
         }
 

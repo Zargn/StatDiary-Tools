@@ -1,22 +1,37 @@
 use std::{
-    collections::HashMap,
-    error::Error,
     fs::{self, File},
     io::{self, BufWriter, Read, Write},
     path::{Path, PathBuf},
 };
 
-use crate::data_entry;
+#[derive(Debug)]
+pub enum ReadDataFileError {
+    Io(io::Error),
+    CorruptedDataFile,
+}
 
+impl From<io::Error> for ReadDataFileError {
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+/// Contains all data entries for one data file and the filepath to said file.
 pub struct DataFile {
     entries: Vec<DataEntry>,
     file_path: PathBuf,
 }
 
+/// Reads the byte at the provided index in the list of bytes, returning the byte or a
+/// ReadDataFileError::CorruptedDataFile error if the index is out of range.
+fn read_at_index(bytes: &[u8], index: usize) -> Result<&u8, ReadDataFileError> {
+    bytes.get(index).ok_or(ReadDataFileError::CorruptedDataFile)
+}
+
 impl DataFile {
     /// Reads all entries in the provided file and returns a list of assembled DataEntry structs
-    pub fn read_from_file(file_path: PathBuf) -> Result<DataFile, io::Error> {
-        let bytes: Vec<u8> = io::BufReader::new(File::open(&file_path)?)
+    pub fn read_from_file(file_path: &Path) -> Result<DataFile, ReadDataFileError> {
+        let bytes: Vec<u8> = io::BufReader::new(File::open(file_path)?)
             .bytes()
             .map_while(Result::ok)
             .collect();
@@ -26,14 +41,15 @@ impl DataFile {
         let mut entries = Vec::new();
 
         while i < bytes.len() {
-            let hour = bytes[i];
-            let mental_score = bytes[i + 1];
-            let physical_score = bytes[i + 2];
+            let hour = read_at_index(&bytes, i)?;
+            let mental_score = read_at_index(&bytes, i + 1)?;
+            let physical_score = read_at_index(&bytes, i + 2)?;
 
             let mut tags = Vec::new();
             i += 3;
             loop {
-                let tag_id = ((bytes[i] as u16) << 8) | bytes[i + 1] as u16;
+                let tag_id = ((*read_at_index(&bytes, i)? as u16) << 8)
+                    | *read_at_index(&bytes, i + 1)? as u16;
                 if tag_id == u16::MAX {
                     i += 2;
                     break;
@@ -43,19 +59,43 @@ impl DataFile {
                 tags.push(tag_id);
             }
 
-            let data_entry = DataEntry::new(hour, mental_score, physical_score, tags);
+            let data_entry = DataEntry::new(*hour, *mental_score, *physical_score, tags);
             entries.push(data_entry);
         }
 
-        Ok(DataFile { entries, file_path })
+        Ok(DataFile {
+            entries,
+            file_path: file_path.to_path_buf(),
+        })
     }
 
+    //
+
+    //
+
+    /// Returns a reference to the internal list of data entries.
+    pub fn entries(&self) -> &Vec<DataEntry> {
+        &self.entries
+    }
+
+    //
+
+    //
+
+    /// Merges tag_2 into tag_1 in each data entry in this file.
+    /// One way to visualise what this does is to imagine that the id of tag_2 is changed to the
+    /// same as tag_1, after which any duplicate ids are removed.
     pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) {
         for data_entry in &mut self.entries {
             data_entry.merge_tags(tag_1, tag_2);
         }
     }
 
+    //
+
+    //
+
+    /// Saves this data file to the location it was read from. The old file is overwritten.
     pub fn save(self) -> Result<(), io::Error> {
         let mut tmp_path = self.file_path.clone();
         tmp_path.add_extension("tmp");
@@ -74,6 +114,11 @@ impl DataFile {
     }
 }
 
+//
+
+//
+
+/// Contains one statdiary data entry.
 pub struct DataEntry {
     pub hour: u8,
     pub mental_score: u8,
@@ -95,47 +140,10 @@ impl DataEntry {
 
     //
 
-    /// Reads all entries in the provided file and returns a list of assembled DataEntry structs
-    pub fn read_from_file(file_path: &Path) -> Result<Vec<DataEntry>, io::Error> {
-        let bytes: Vec<u8> = io::BufReader::new(File::open(file_path)?)
-            .bytes()
-            .map_while(Result::ok)
-            .collect();
-
-        let mut i = 0;
-
-        let mut data_entries = Vec::new();
-
-        while i < bytes.len() {
-            let hour = bytes[i];
-            let mental_score = bytes[i + 1];
-            let physical_score = bytes[i + 2];
-
-            let mut tags = Vec::new();
-            i += 3;
-            loop {
-                let tag_id = ((bytes[i] as u16) << 8) | bytes[i + 1] as u16;
-                if tag_id == u16::MAX {
-                    i += 2;
-                    break;
-                }
-                i += 2;
-
-                tags.push(tag_id);
-            }
-
-            let data_entry = DataEntry::new(hour, mental_score, physical_score, tags);
-
-            data_entries.push(data_entry);
-        }
-
-        Ok(data_entries)
-    }
-
-    //
-
-    //
-
+    /// Merges the two provided tags into one in this entry.
+    /// tag_2 is merged with tag_1, meaning that if tag_1 or/and tag_2 exists in this entry then
+    /// only one tag_1 will be left. If tag_2 exists but not tag_1 then tag_2 will be replaced by
+    /// tag_1. If only tag_1 exist no change is made.
     fn merge_tags(&mut self, tag_1: u16, tag_2: u16) {
         let mut i = 0;
         let mut tag_found = false;
@@ -168,25 +176,4 @@ impl DataEntry {
         writer.write_all(&u16::MAX.to_be_bytes())?;
         Ok(())
     }
-
-    //
-
-    //
-
-    /*
-    /// Prints the provided data entry
-    pub fn temp_display_entry(&self, tags: &HashMap<u16, String>) {
-        print!(
-            "\n {}:00 | {} | {} | ",
-            self.hour, self.mental_score, self.physical_score
-        );
-        for tag_id in &self.tags {
-            if let Some(tag) = tags.get(&tag_id) {
-                print!("{} ", tag);
-            } else {
-                print!("UNKNOWN_ID ");
-            }
-        }
-        println!();
-    } */
 }

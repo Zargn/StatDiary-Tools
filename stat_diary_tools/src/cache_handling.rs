@@ -6,10 +6,12 @@ use std::{
     path::Path,
 };
 
-use log::warn;
+use log::{error, warn};
 
 use crate::{
-    data_entry::DataEntry, db_path::DataBasePath, utilities::read_sorted_directory,
+    data_entry::{DataFile, ReadDataFileError},
+    db_path::DataBasePath,
+    utilities::read_sorted_directory,
     DATAFILEEXTENSION,
 };
 
@@ -187,14 +189,21 @@ fn create_month_cache(month_folder: &Path) -> Result<Overview, io::Error> {
 
         let mut overview = Overview::default();
 
-        let data_entries = DataEntry::read_from_file(&file)?;
+        let data_file = match DataFile::read_from_file(&file) {
+            Ok(data_file) => data_file,
+            Err(ReadDataFileError::CorruptedDataFile) => {
+                error!("Data file [{:?}] is corrupted! This file will not be represented in the cache!", file);
+                continue;
+            }
+            Err(ReadDataFileError::Io(io_err)) => return Err(io_err),
+        };
 
-        for data in data_entries {
+        for data in data_file.entries() {
             overview.m_score.add(data.mental_score);
             overview.p_score.add(data.physical_score);
 
-            for tag in data.tags {
-                overview.tags.insert(tag);
+            for tag in &data.tags {
+                overview.tags.insert(*tag);
             }
         }
 
