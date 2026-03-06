@@ -1,12 +1,14 @@
-use std::ffi::OsStr;
+use std::{ffi::OsStr, io};
 
+use log::{LevelFilter, SetLoggerError};
 use walkdir::WalkDir;
 
 use crate::{
     cache_handling::regenerate_caches,
     data_entry::DataFile,
     db_path::DataBasePath,
-    db_status::{ActiveTask, DBStatus},
+    db_status::{ActiveTask, DBStatus, DBStatusError},
+    logger::DBLogger,
     stat_sums::regenerate_tag_sums,
     tags::{TagList, TagsError},
 };
@@ -16,12 +18,28 @@ mod cache_handling;
 mod data_entry;
 mod db_path;
 mod db_status;
+mod logger;
 mod stat_diary_error;
 mod stat_sums;
 mod tags;
 mod update_database;
 
 const DATAFILEEXTENSION: &str = "statdiary";
+
+pub fn init_logger() -> Result<(), SetLoggerError> {
+    log::set_boxed_logger(Box::new(DBLogger)).map(|()| log::set_max_level(LevelFilter::Info))
+}
+
+#[derive(Debug)]
+pub enum RegenCachesError {
+    Io(io::Error),
+    DBStatus(DBStatusError),
+}
+
+/*
+pub fn regenerate_caches_(db_path: &DataBasePath) -> Result<(), RegenCachesError> {
+    todo!();
+}*/
 
 //
 
