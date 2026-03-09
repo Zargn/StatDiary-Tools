@@ -1,8 +1,13 @@
 use std::{
+    ffi::OsStr,
     fs::{self, File},
     io::{self, BufWriter, Read, Write},
     path::{Path, PathBuf},
 };
+
+use log::warn;
+
+use crate::DATAFILEEXTENSION;
 
 #[derive(Debug)]
 pub enum ReadDataFileError {
@@ -67,6 +72,37 @@ impl DataFile {
             entries,
             file_path: file_path.to_path_buf(),
         })
+    }
+
+    //
+
+    //
+
+    /// Returns true if the proivded file is a data file and false if it isn't.
+    /// Will log the reason a file is decided to not be a data file to the logger.
+    /// If a non-datafile of expected name is encountered this will return false without
+    /// logging the reason.
+    pub fn is_data_file(file: &Path) -> bool {
+        if file.is_dir() {
+            warn!("Ignoring unexpected directory in month folder! {:?}", file);
+            return false;
+        }
+
+        // Don't give warning for expected non-data files
+        if file.file_name() == Some(OsStr::new("month_cache.txt")) {
+            return false;
+        }
+
+        let Some(file_extension) = file.extension() else {
+            warn!("Ignoring file due to missing file extension! {:?}", file);
+            return false;
+        };
+
+        if file_extension != DATAFILEEXTENSION {
+            warn!("Ignoring file: {:?}", file);
+            return false;
+        }
+        true
     }
 
     //

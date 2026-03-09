@@ -9,7 +9,7 @@ use std::{
 use log::{error, warn};
 
 use crate::{
-    data_entry::{DataFile, ReadDataFileError},
+    data_entry::{self, DataFile, ReadDataFileError},
     db_path::DataBasePath,
     utilities::read_sorted_directory,
     DATAFILEEXTENSION,
@@ -178,7 +178,7 @@ fn create_month_cache(month_folder: &Path) -> Result<Overview, io::Error> {
     let mut month_overview = Overview::default();
 
     for file in read_sorted_directory(month_folder)? {
-        if !is_data_file(&file) {
+        if !DataFile::is_data_file(&file) {
             continue;
         }
 
@@ -224,35 +224,4 @@ fn create_month_cache(month_folder: &Path) -> Result<Overview, io::Error> {
     result_writer.flush()?;
 
     Ok(month_overview)
-}
-
-//
-
-//
-
-/// Returns true if the proivded file is a data file and false if it isn't.
-/// Will log the reason a file is decided to not be a data file to the logger.
-/// If a non-datafile of expected name is encountered this will return false without
-/// logging the reason.
-fn is_data_file(file: &Path) -> bool {
-    if file.is_dir() {
-        warn!("Ignoring unexpected directory in month folder! {:?}", file);
-        return false;
-    }
-
-    // Don't give warning for expected non-data files
-    if file.file_name() == Some(OsStr::new("month_cache.txt")) {
-        return false;
-    }
-
-    let Some(file_extension) = file.extension() else {
-        warn!("Ignoring file due to missing file extension! {:?}", file);
-        return false;
-    };
-
-    if file_extension != DATAFILEEXTENSION {
-        warn!("Ignoring file: {:?}", file);
-        return false;
-    }
-    true
 }
