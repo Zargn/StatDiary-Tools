@@ -58,9 +58,9 @@ fn get_byte(data: Option<&u8>) -> u8 {
     }
 }
 
-pub fn load_image(db_path: &DataBasePath, img_path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn load_image(img_path: &Path, db_path: &Path) -> Result<(), Box<dyn Error>> {
     let data = get_data_from_image(img_path)?;
-    extract_db(db_path.root(), data)
+    extract_db(db_path, data)
 }
 
 fn get_data_from_image(img_path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {

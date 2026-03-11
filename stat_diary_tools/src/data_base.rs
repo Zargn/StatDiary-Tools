@@ -1,11 +1,16 @@
-use std::path::{Path, PathBuf};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 use log::error;
 
 use crate::{
-    backup,
+    backup, cache_handling,
     db_path::{DataBasePath, DataBasePathError},
-    db_status::{ActiveTask, DBStatus, DBStatusError},
+    db_status::{self, ActiveTask, DBStatus, DBStatusError},
+    merge_tags,
+    stat_sums::{self, StatSumsError},
 };
 
 pub struct DataBase {
@@ -33,6 +38,7 @@ impl DataBase {
     fn tmp() {
         //
         let db = DataBase::load(PathBuf::new()).unwrap();
+
         //
         todo!();
     }
@@ -82,16 +88,13 @@ impl DataBase {
 
         match active_task {
             ActiveTask::None => {}
+            ActiveTask::RegenerateCaches => cache_handling::regenerate_caches(&self.path)?,
+            ActiveTask::RegenerateTagSums => stat_sums::regenerate_tag_sums(&self.path)?,
+
             ActiveTask::MergeTags(tag_1, tag_2) => {
                 todo!();
             }
             ActiveTask::RenameTag(old_name, new_name) => {
-                todo!();
-            }
-            ActiveTask::RegenerateCaches => {
-                todo!();
-            }
-            ActiveTask::RegenerateTagSums => {
                 todo!();
             }
         }
@@ -100,9 +103,76 @@ impl DataBase {
 
         Ok(())
     }
-    pub fn regen_caches() {}
-    pub fn regen_tag_sums() {}
-    pub fn merge_tags() {}
+
+    /// Regenerates all the caches in the database.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    /// * The database is busy.
+    /// * An io error occured.
+    ///
+    /// If it encounters a unknown or corrupted file a warning or error is logged. The function
+    /// will then continue on skipping the bad file.
+    pub fn regen_caches(&self) -> Result<()> {
+        let db_status = DBStatus::activate(&self.path, ActiveTask::RegenerateCaches)?;
+
+        cache_handling::regenerate_caches(&self.path)?;
+
+        db_status.deactivate();
+        Ok(())
+    }
+
+    /// Regenerates all tag sums in the database.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    /// * The database is busy.
+    /// * An io error occured.
+    pub fn regen_tag_sums(&self) -> Result<()> {
+        let db_status = DBStatus::activate(&self.path, ActiveTask::RegenerateTagSums)?;
+
+        stat_sums::regenerate_tag_sums(&self.path)?;
+
+        db_status.deactivate();
+        Ok(())
+    }
+
+    /// Merges `tag_1` into `tag_2`. Any existing reference to tag_1 will be changed to tag_2 if
+    /// tag_2 doesn't already exist in that context.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    pub fn merge_tags(&self, tag_1: u16, tag_2: u16) -> Result<()> {
+        let db_status = DBStatus::activate(&self.path, ActiveTask::RegenerateTagSums)?;
+
+        // TODO Error handling...
+        merge_tags(&self.path, tag_1, tag_2)?;
+
+        if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
+            error!(
+                "MergeTags() received {:?} when attempting to regenerate tag sums!",
+                e
+            );
+        }
+
+        if let Err(e) = cache_handling::regenerate_caches(&self.path) {
+            error!(
+                "MergeTags() received {:?} when attempting to regenerate caches!",
+                e
+            );
+        }
+
+        Ok(())
+    }
     pub fn rename_tag() {}
     pub fn compress_to_image() {}
     pub fn upgrade_database() {}
@@ -121,8 +191,18 @@ impl Error {
 
 #[derive(Debug)]
 pub enum ErrorKind {
+    Io(io::Error),
     DataBasePath(DataBasePathError),
     DBStatus(DBStatusError),
+    StatSum(StatSumsError),
+}
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Self {
+            kind: ErrorKind::Io(value),
+        }
+    }
 }
 
 impl From<DataBasePathError> for Error {
@@ -137,6 +217,14 @@ impl From<DBStatusError> for Error {
     fn from(value: DBStatusError) -> Self {
         Self {
             kind: ErrorKind::DBStatus(value),
+        }
+    }
+}
+
+impl From<StatSumsError> for Error {
+    fn from(value: StatSumsError) -> Self {
+        Self {
+            kind: ErrorKind::StatSum(value),
         }
     }
 }

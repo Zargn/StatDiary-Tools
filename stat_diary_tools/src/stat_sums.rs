@@ -40,7 +40,7 @@ impl From<walkdir::Error> for StatSumsError {
 
 //
 
-type Result<T> = std::result::Result<T, StatSumsError>;
+//type Result<T> = std::result::Result<T, StatSumsError>;
 
 /// Contains a list of tag ids and the number of times each tag id has been added to this instance.
 #[derive(Debug, Default)]
@@ -69,7 +69,7 @@ impl Tags {
 //
 
 /// Regenerates all types of tag sums for the entire database.
-pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<()> {
+pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<(), io::Error> {
     let mut general = Tags::default();
     let mut times: HashMap<u8, Tags> = HashMap::new();
     let mut day_and_times: HashMap<u8, HashMap<u8, Tags>> = HashMap::new();
@@ -82,9 +82,14 @@ pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<()> {
             continue;
         }
 
-        let weekday_times = day_and_times
-            .entry(weekday_nr_from_filename(filepath)?)
-            .or_default();
+        let weekday_nr = match weekday_nr_from_filename(filepath) {
+            Ok(nr) => nr,
+            Err(_) => {
+                log::warn!("Could not get weekday number from file: {filepath:?}");
+                continue;
+            }
+        };
+        let weekday_times = day_and_times.entry(weekday_nr).or_default();
 
         let data_file = match DataFile::read_from_file(filepath) {
             Ok(data_file) => data_file,
@@ -92,7 +97,7 @@ pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<()> {
                 error!("Data file [{:?}] is corrupted! This file will not be represented in the stat sums!", filepath);
                 continue;
             }
-            Err(ReadDataFileError::Io(io_err)) => return Err(StatSumsError::Io(io_err)),
+            Err(ReadDataFileError::Io(io_err)) => return Err(io_err),
         };
 
         for data_entry in data_file.entries() {
@@ -119,7 +124,7 @@ fn save_stat_sums(
     general: Tags,
     times: HashMap<u8, Tags>,
     day_and_times: HashMap<u8, HashMap<u8, Tags>>,
-) -> Result<()> {
+) -> Result<(), io::Error> {
     let stat_sums_path = db_path.stat_sums();
     create_directory(&stat_sums_path)?;
     write_to_file(general, &stat_sums_path.join("global_sums.txt"))?;
@@ -144,7 +149,7 @@ fn save_stat_sums(
 
 /// Creates a directory at the provided path, then saving each time_tags instance to its own file
 /// within said directory.
-fn time_stats(time_tags: HashMap<u8, Tags>, path: &Path) -> Result<()> {
+fn time_stats(time_tags: HashMap<u8, Tags>, path: &Path) -> Result<(), io::Error> {
     create_directory(path)?;
     for (hour, tags) in time_tags.into_iter() {
         write_to_file(tags, &path.join(format!("{:02}.txt", hour)))?;
@@ -157,10 +162,10 @@ fn time_stats(time_tags: HashMap<u8, Tags>, path: &Path) -> Result<()> {
 //
 
 /// Ensures a directory exists at the provided path, creating one if it doesn't exist.
-fn create_directory(path: &Path) -> Result<()> {
+fn create_directory(path: &Path) -> Result<(), io::Error> {
     if let Err(e) = fs::create_dir(path) {
         if e.kind() != io::ErrorKind::AlreadyExists {
-            return Err(StatSumsError::Io(e));
+            return Err(e);
         }
     }
     Ok(())
@@ -171,7 +176,7 @@ fn create_directory(path: &Path) -> Result<()> {
 //
 
 /// Writes the provided tags instance to the provided file_path.
-fn write_to_file(tags: Tags, file_path: &Path) -> Result<()> {
+fn write_to_file(tags: Tags, file_path: &Path) -> Result<(), io::Error> {
     let mut writer = BufWriter::new(File::create(file_path)?);
     for (tag_id, occurances) in tags.into_sorted_vec() {
         writeln!(writer, "{} {}", occurances, tag_id)?;
@@ -186,7 +191,7 @@ fn write_to_file(tags: Tags, file_path: &Path) -> Result<()> {
 
 /// Attempts to get the &str filename from the provided path, returning a StatSumsError::InvalidFileName
 /// if unsuccessful.
-fn filename(filepath: &Path) -> Result<&str> {
+fn filename(filepath: &Path) -> Result<&str, StatSumsError> {
     filepath
         .file_stem()
         .and_then(|s| s.to_str())
@@ -199,7 +204,7 @@ fn filename(filepath: &Path) -> Result<&str> {
 
 /// Returns the weekday index in the second part of a datafile name.
 /// Datafiles use the format "{day_number}-{weekday_index}.statdiary"
-fn weekday_nr_from_filename(filepath: &Path) -> Result<u8> {
+fn weekday_nr_from_filename(filepath: &Path) -> Result<u8, StatSumsError> {
     let name = filename(filepath)?;
     name.split('-')
         .nth(1)
