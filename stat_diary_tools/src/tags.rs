@@ -23,6 +23,11 @@ impl From<io::Error> for TagsError {
 
 type Result<T> = std::result::Result<T, TagsError>;
 
+/// This is a in-memory representation of a tag list.
+/// It provides a variety of functions, including getting the tag name from a id, or a id from a
+/// tag name.
+/// Furthermore it enables modifications to the tags list, like deleting, renaming, or merging
+/// tags.
 pub struct TagList {
     id_str_map: HashMap<u16, String>,
     str_id_map: HashMap<String, u16>,
@@ -31,6 +36,9 @@ pub struct TagList {
 }
 
 impl TagList {
+    /// Attempts to create a TagList instance using the provided database.
+    /// If said database is missing a tags.txt file then this will fail.
+    /// It will also fail if said file doesn't follow the expected format of "{tag_id} {tag_name}".
     pub fn from_file(db_path: &DataBasePath) -> Result<TagList> {
         let filepath = db_path.root().join("tags.txt");
 
@@ -61,6 +69,7 @@ impl TagList {
                 ));
             }
         }
+
         Ok(TagList {
             id_str_map,
             str_id_map,
@@ -73,6 +82,8 @@ impl TagList {
 
     //
 
+    /// Returns the id linked to the provided tag name.
+    /// If the tag name doesn't exist a TagsError::UnknownTag is returned.
     pub fn get_id(&self, tag: &str) -> Result<&u16> {
         self.str_id_map
             .get(tag)
@@ -83,6 +94,8 @@ impl TagList {
 
     //
 
+    /// Returns the tag name linked to the provided tag id.
+    /// If the tag id doesn't exist a TagsError::UnknownId is returned.
     pub fn get_tag(&self, tag_id: u16) -> Result<&String> {
         self.id_str_map
             .get(&tag_id)
@@ -93,6 +106,17 @@ impl TagList {
 
     //
 
+    /// Returns if the provided tag_id exists or not.
+    pub fn tag_exists(&self, tag_id: u16) -> bool {
+        self.id_str_map.contains_key(&tag_id)
+    }
+
+    //
+
+    //
+
+    /// Removes the provided tag_id and its linked tag name from the tag list.
+    /// Will fail with a TagsError if the provided tag doesn't exist.
     pub fn remove_tag(&mut self, tag_id: u16) -> Result<()> {
         let tag_str = self
             .id_str_map
@@ -110,11 +134,10 @@ impl TagList {
 
     //
 
+    /// Attempts to rename old_tag to new_tag while keeping the same tag_id.
+    /// If old_tag doesn't exist a TagsError::UnknownTag will be returned.
+    /// If new_tag already exists this will fail with a TagsError::TagAlreadyExists.
     pub fn rename_tag(&mut self, old_tag: String, new_tag: String) -> Result<()> {
-        //println!("str-id map: \n{:?}\n\n", self.str_id_map);
-        //println!("id-str map: \n{:?}\n\n", self.id_str_map);
-
-        //println!("old-tag: {}, new-tag: {}", old_tag, new_tag);
         if self.str_id_map.contains_key(&new_tag) {
             return Err(TagsError::TagAlreadyExists);
         }
@@ -133,6 +156,9 @@ impl TagList {
 
     //
 
+    /// Attempts to merge the tag_1 into tag_2.
+    /// If any of the tags doesn't exist then a TagsError::UnknownId is returned.
+    /// Otherwise tag_1 is removed from the tag list, leaving only tag_2.
     pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) -> Result<()> {
         let _ = self.get_tag(tag_1)?;
         let _ = self.get_tag(tag_2)?;
@@ -145,6 +171,11 @@ impl TagList {
 
     //
 
+    /// Saves the tags list to the file it was originally read from.
+    /// The original file is overwritten by the new.
+    ///
+    /// Writes to a .tmp file which when completed is swapped with the original file, ensuring that
+    /// no data is lost in the event of the program stopping mid-write.
     pub fn save(self) -> Result<()> {
         let tmp_path = self.db_path.root().join("tags.txt.tmp");
         let filepath = self.db_path.root().join("tags.txt");
@@ -165,9 +196,17 @@ impl TagList {
         Ok(())
     }
 
+    //
+
+    //
+
+    /// Adds any removed id to a reclaimed.tags file.
+    ///
+    /// Writes to a .tmp file which when completed is swapped with the original file, ensuring that
+    /// no data is lost in the event of the program stopping mid-write.
     fn save_removed_ids(&self) -> Result<()> {
-        let tmp_path = self.db_path.root().join("unused_tags.tags.tmp");
-        let filepath = self.db_path.root().join("unused_tags.tags");
+        let tmp_path = self.db_path.root().join("reclaimed.tags.tmp");
+        let filepath = self.db_path.root().join("reclaimed.tags");
 
         let mut writer = BufWriter::new(File::create(&tmp_path)?);
 

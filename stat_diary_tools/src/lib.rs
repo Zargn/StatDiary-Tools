@@ -45,11 +45,14 @@ pub fn regenerate_caches_(db_path: &DataBasePath) -> Result<(), RegenCachesError
 
 //
 
-fn merge_tags_wrapper(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
+fn merge_tags_wrapper(
+    db_path: &DataBasePath,
+    tag_1: u16,
+    tag_2: u16,
+) -> Result<(), MergeTagsError> {
     let Ok(db_status) = DBStatus::activate(db_path, ActiveTask::MergeTags(tag_1, tag_2)) else {
         println!("Database is busy! Aborting...");
-        return Err(TagsError::TagAlreadyExists);
-        //return Err(DBError::DataBaseBusy);
+        return Err(MergeTagsError::DataBaseBusy);
     };
 
     println!("Merging tags");
@@ -60,6 +63,20 @@ fn merge_tags_wrapper(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<
         return Err(error);
     } // */
     db_status.deactivate();
+
+    if let Err(e) = regenerate_tag_sums(db_path) {
+        error!(
+            "MergeTags() received {:?} when attempting to regenerate tag sums!",
+            e
+        );
+    }
+
+    if let Err(e) = regenerate_caches(db_path) {
+        error!(
+            "MergeTags() received {:?} when attempting to regenerate caches!",
+            e
+        );
+    }
 
     println!("Regenerating Tag sums");
     if let Err(error) = regenerate_tag_sums(db_path) {
@@ -81,17 +98,45 @@ fn merge_tags_wrapper(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<
 
 //
 
-/*
-Make sure to add a check when adding tags to fill out any potential empty space left by a
-merge.
-*/
-fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), TagsError> {
+#[derive(Debug)]
+pub enum MergeTagsError {
+    Io(io::Error),
+    WalkDir(walkdir::Error),
+    Tags(TagsError),
+    DataBaseBusy,
+}
+
+impl From<io::Error> for MergeTagsError {
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+impl From<walkdir::Error> for MergeTagsError {
+    fn from(value: walkdir::Error) -> Self {
+        Self::WalkDir(value)
+    }
+}
+
+impl From<TagsError> for MergeTagsError {
+    fn from(value: TagsError) -> Self {
+        Self::Tags(value)
+    }
+}
+
+fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), MergeTagsError> {
     let mut tags = TagList::from_file(db_path)?;
-    tags.merge_tags(tag_1, tag_2)?;
+
+    // We use get_tag here to automatically returns a error if either tag doesn't exist.
+    let _ = tags.get_tag(tag_1)?;
+    let _ = tags.get_tag(tag_2)?;
+
+    tags.remove_tag(tag_1)?;
 
     for path in WalkDir::new(db_path.data()) {
-        let path = path.unwrap();
+        let path = path?;
         let filepath = path.path();
+        if DataFile::is_data_file(filepath) {}
 
         if !filepath.is_file() {
             continue;
@@ -107,7 +152,7 @@ fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), Tags
                 error!("Data file [{:?}] is corrupted! This file will not be represented in the cache!", filepath);
                 continue;
             }
-            Err(ReadDataFileError::Io(io_err)) => return Err(TagsError::Io(io_err)),
+            Err(ReadDataFileError::Io(io_err)) => return Err(MergeTagsError::Io(io_err)),
         };
 
         data_file.merge_tags(tag_1, tag_2);
@@ -115,67 +160,16 @@ fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), Tags
         data_file.save()?;
     }
 
-    //tags.save()?;
-
-    /*
-    Get tag ids for both tag1 and tag2.
-
-    iterate through all .statdiary files in the data directory.
-        for each data_entry in file
-            if tag1 could be removed from data_entry.tags
-                ensure tag2 is exists in data_entry.tags.
-                (Since we are merging two tags we don't want to store two duplicate tags in a single entry)
-
-
-    call regenerate_tag_sums function.
-
-
-    call regenerate_caches function.
-    */
+    tags.save()?;
 
     Ok(())
 }
+
 fn rename_tag(db_path: &DataBasePath, old_tag: String, new_tag: String) -> Result<(), TagsError> {
     let mut tags = TagList::from_file(db_path)?;
     tags.rename_tag(old_tag, new_tag)?;
     tags.save()
 }
-
-//
-
-//
-
-/*
-This function is meant to eventually be used to update any old database to use a newer format.
-No functionality should be implemented yet as it is not the current priority.
-
-Some potential plans for changes that would require this is:
-Better tag storage. Keep the string representations in a separate file and save the tag index
-in each entry instead of the full string.
-
-Later update could be to reduce the storage needed even further.
-If tags are stored as numbers instead of strings then we are technically only storing numbers
-in the entries. Meaning we could avoid using a text file entirely and just go with raw bytes.
-1st byte would be a u8 representing the mental score, 2nd byte would be another u8 this time
-representing the physical score. After that we could have any number of double bytes
-representing a u16 tag id. Then the end of that entry is marked with a double byte u16 of value
-u16::MAX.
-No strings or text needed. This way the only thing stored in the data files would be the actual
-data and one u16 used as a marker for each entry. Much better than storing the data in a human
-readable format where a lot of space is taken by "," and "|".
-Although for this we should probably make both scores integers instead of floats.
-
-For example the following row in a txt document takes up 41 bytes. (1 byte per char)
-|13:00|85,8|81,5|Lunch Geoguessr Youtube|
-while if it was translated to raw bytes it would only require 11 bytes.
-1 > for hour of day
-1 > for mental score
-1 > for physical score
-6 > for 3 tags (2 bytes per tag to ensure the user doesn't run out of possible tag indexes.)
-2 > for end marker u16::MAX
-
-Make sure to call RegenerateCaches after this to create all the caches in the correct folders.
-*/
 
 //
 
