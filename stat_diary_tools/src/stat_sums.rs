@@ -42,16 +42,21 @@ impl From<walkdir::Error> for StatSumsError {
 
 type Result<T> = std::result::Result<T, StatSumsError>;
 
+/// Contains a list of tag ids and the number of times each tag id has been added to this instance.
 #[derive(Debug, Default)]
 struct Tags {
     tags: HashMap<u16, u16>,
 }
 
 impl Tags {
+    /// Adds one occurnace of the provided tag_id to this tags instance.
     fn add(&mut self, tag_id: u16) {
         *self.tags.entry(tag_id).or_default() += 1;
     }
 
+    /// Extracts the internal hashmap of this Tags instance, then returning it as a sorted vec of (id,
+    /// occurnaces) where it is sorted by the number of occurances with the most common placed
+    /// first.
     fn into_sorted_vec(self) -> Vec<(u16, u16)> {
         let mut tags: Vec<(u16, u16)> = self.tags.into_iter().collect();
         tags.sort_by(|a, b| b.1.cmp(&a.1));
@@ -63,6 +68,7 @@ impl Tags {
 
 //
 
+/// Regenerates all types of tag sums for the entire database.
 pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<()> {
     let mut general = Tags::default();
     let mut times: HashMap<u8, Tags> = HashMap::new();
