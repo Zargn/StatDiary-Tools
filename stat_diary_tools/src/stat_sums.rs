@@ -21,7 +21,6 @@ use crate::{
 pub enum StatSumsError {
     Io(io::Error),
     WalkDir(walkdir::Error),
-    InvalidFileName(String),
 }
 
 impl From<io::Error> for StatSumsError {
@@ -83,8 +82,8 @@ pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<(), io::Error> {
         }
 
         let weekday_nr = match weekday_nr_from_filename(filepath) {
-            Ok(nr) => nr,
-            Err(_) => {
+            Some(nr) => nr,
+            None => {
                 log::warn!("Could not get weekday number from file: {filepath:?}");
                 continue;
             }
@@ -191,11 +190,8 @@ fn write_to_file(tags: Tags, file_path: &Path) -> Result<(), io::Error> {
 
 /// Attempts to get the &str filename from the provided path, returning a StatSumsError::InvalidFileName
 /// if unsuccessful.
-fn filename(filepath: &Path) -> Result<&str, StatSumsError> {
-    filepath
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .ok_or_else(|| StatSumsError::InvalidFileName(format!("{:?}", filepath)))
+fn filename(filepath: &Path) -> Option<&str> {
+    filepath.file_stem().and_then(|s| s.to_str())
 }
 
 //
@@ -204,13 +200,9 @@ fn filename(filepath: &Path) -> Result<&str, StatSumsError> {
 
 /// Returns the weekday index in the second part of a datafile name.
 /// Datafiles use the format "{day_number}-{weekday_index}.statdiary"
-fn weekday_nr_from_filename(filepath: &Path) -> Result<u8, StatSumsError> {
+fn weekday_nr_from_filename(filepath: &Path) -> Option<u8> {
     let name = filename(filepath)?;
-    name.split('-')
-        .nth(1)
-        .ok_or_else(|| StatSumsError::InvalidFileName(name.to_string()))?
-        .parse::<u8>()
-        .map_err(|_| StatSumsError::InvalidFileName(name.to_string()))
+    name.split('-').nth(1)?.parse::<u8>().ok()
 }
 
 //

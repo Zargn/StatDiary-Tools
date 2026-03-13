@@ -4,6 +4,8 @@ use std::{
     path::PathBuf,
 };
 
+use log::warn;
+
 use crate::db_path::DataBasePath;
 
 //
@@ -28,8 +30,11 @@ impl ActiveTask {
             "2" => Ok(ActiveTask::RegenerateTagSums),
             "3" => {
                 let (tag_1, tag_2) = {
+                    warn!("db_status::ActiveTask::parse() has unacceptable error handling. Correction required!");
                     let mut data = parts.next().ok_or(DBStatusError::MissingData)?.split(' ');
                     (
+                        // TODO: Fix error handling to NOT crash the program if the file has a
+                        // unexpected format.
                         data.next().unwrap().parse().unwrap(),
                         data.next().unwrap().parse().unwrap(),
                     )

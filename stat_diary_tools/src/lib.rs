@@ -53,7 +53,8 @@ fn merge_tags_wrapper(
 ) -> Result<(), MergeTagsError> {
     let Ok(db_status) = DBStatus::activate(db_path, ActiveTask::MergeTags(tag_1, tag_2)) else {
         println!("Database is busy! Aborting...");
-        return Err(MergeTagsError::DataBaseBusy);
+        //return Err(MergeTagsError::DataBaseBusy);
+        todo!();
     };
 
     println!("Merging tags");
@@ -104,7 +105,6 @@ pub enum MergeTagsError {
     Io(io::Error),
     WalkDir(walkdir::Error),
     Tags(TagsError),
-    DataBaseBusy,
 }
 
 impl From<io::Error> for MergeTagsError {
