@@ -113,7 +113,7 @@ pub struct DBStatus {
 }
 
 impl DBStatus {
-    pub fn activate(db_path: &DataBasePath, task: ActiveTask) -> Result<DBStatus> {
+    pub fn lock(db_path: &DataBasePath, task: ActiveTask) -> Result<DBStatus> {
         let filepath = db_path.root().join(STATUSFILENAME);
 
         let db_status = DBStatus {
@@ -140,7 +140,7 @@ impl DBStatus {
 
     //
 
-    pub fn deactivate(self) {
+    pub fn unlock(self) {
         let _removal_result = std::fs::remove_file(self.status_path);
     }
 }

@@ -56,7 +56,7 @@ impl DataBase {
     /// * `img_path` does not lead to a image.
     /// * `img_path` leads to a image but said image is not a valid compressed database.
     pub fn load_from_image(img_path: &Path, db_path: PathBuf) -> Result<DataBase> {
-        if let Err(e) = backup::load_image(&img_path, &db_path) {
+        if let Err(e) = backup::load_image(img_path, &db_path) {
             error!("DataBase::load_from_image could not load image! Error: {e:?}");
         }
 
@@ -77,9 +77,9 @@ impl DataBase {
     /// * The active task is missing data. (The task id is known but the required data is missing.)
     /// * The task is resumed but encountered an error.
     pub fn resume_task(&self) -> Result<()> {
-        let activate_error = match DBStatus::activate(&self.path, ActiveTask::None) {
+        let activate_error = match DBStatus::lock(&self.path, ActiveTask::None) {
             Ok(db_status) => {
-                db_status.deactivate();
+                db_status.unlock();
                 return Ok(());
             }
             Err(db_error) => db_error,
@@ -97,19 +97,19 @@ impl DataBase {
             ActiveTask::MergeTags(tag_1, tag_2) => {
                 if let Err(e) = self.intr_merge_tags(tag_1, tag_2) {
                     error!("merge_tags() failed due to: {e:?}");
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
             ActiveTask::RenameTag(old_name, new_name) => {
                 if let Err(e) = self.intr_rename_tag(old_name, new_name) {
                     error!("rename_tag() failed due to: {e:?}");
-                    return Err(e.into());
+                    return Err(e);
                 }
                 todo!();
             }
         }
 
-        db_status.deactivate();
+        db_status.unlock();
 
         Ok(())
     }
@@ -127,11 +127,11 @@ impl DataBase {
     /// If it encounters a unknown or corrupted file a warning or error is logged. The function
     /// will then continue on skipping the bad file.
     pub fn regen_caches(&self) -> Result<()> {
-        let db_status = DBStatus::activate(&self.path, ActiveTask::RegenerateCaches)?;
+        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateCaches)?;
 
         cache_handling::regenerate_caches(&self.path)?;
 
-        db_status.deactivate();
+        db_status.unlock();
         Ok(())
     }
 
@@ -145,11 +145,11 @@ impl DataBase {
     /// * The database is busy.
     /// * An io error occured.
     pub fn regen_tag_sums(&self) -> Result<()> {
-        let db_status = DBStatus::activate(&self.path, ActiveTask::RegenerateTagSums)?;
+        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
         stat_sums::regenerate_tag_sums(&self.path)?;
 
-        db_status.deactivate();
+        db_status.unlock();
         Ok(())
     }
 
@@ -165,16 +165,16 @@ impl DataBase {
     /// * An io error occured.
     /// * `tag_1` or `tag_2` does not exist.
     pub fn merge_tags(&self, tag_1: u16, tag_2: u16) -> Result<()> {
-        let db_status = DBStatus::activate(&self.path, ActiveTask::RegenerateTagSums)?;
+        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
         // TODO Error handling...
         if let Err(e) = self.intr_merge_tags(tag_1, tag_2) {
             error!("merge_tags() failed due to: {e:?}");
-            db_status.deactivate();
-            return Err(e.into());
+            db_status.unlock();
+            return Err(e);
         }
 
-        db_status.deactivate();
+        db_status.unlock();
 
         Ok(())
     }
@@ -191,19 +191,22 @@ impl DataBase {
     /// * `old_tag` doesn't exist.
     /// * `new_tag` already exists. (Meaning a merge is required instead.)
     pub fn rename_tag(&self, old_tag: String, new_tag: String) -> Result<()> {
-        let db_status = DBStatus::activate(&self.path, ActiveTask::RegenerateTagSums)?;
+        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
         self.intr_rename_tag(old_tag, new_tag)?;
 
-        db_status.deactivate();
+        db_status.unlock();
 
         Ok(())
     }
 
-    ///
     pub fn compress_to_image() {}
     pub fn upgrade_database() {}
 }
+
+//
+
+//
 
 // Private functions
 impl DataBase {

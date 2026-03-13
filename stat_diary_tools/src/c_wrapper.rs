@@ -61,7 +61,7 @@ pub unsafe extern "C" fn ExtractDBFromImage(
     }
     let db_image_path = unsafe { CStr::from_ptr(db_image_path).to_string_lossy() };
 
-    if let Err(error) = load_image(&db_path, Path::new(&db_image_path.to_string())) {
+    if let Err(error) = load_image(db_path.root(), Path::new(&db_image_path.to_string())) {
         println!("Error occured! [{:?}]", error);
         return -2;
     }
@@ -82,7 +82,7 @@ pub unsafe extern "C" fn RegenerateCaches(db_path_ptr: *const c_char) -> i32 {
         Err(ec) => return ec,
     };
 
-    let Ok(db_status) = DBStatus::activate(&db_path, ActiveTask::RegenerateCaches) else {
+    let Ok(db_status) = DBStatus::lock(&db_path, ActiveTask::RegenerateCaches) else {
         println!("Database is busy! Aborting...");
         return -3;
     };
@@ -90,12 +90,12 @@ pub unsafe extern "C" fn RegenerateCaches(db_path_ptr: *const c_char) -> i32 {
     if let Err(error) = regenerate_caches(&db_path) {
         println!("Error occured!\n{:?}", error);
 
-        db_status.deactivate();
+        db_status.unlock();
         return -3;
         //return error.into_code();
     }
 
-    db_status.deactivate();
+    db_status.unlock();
 
     0
 }
@@ -111,9 +111,9 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
         Err(ec) => return ec,
     };
 
-    let activate_error = match DBStatus::activate(&db_path, ActiveTask::None) {
+    let activate_error = match DBStatus::lock(&db_path, ActiveTask::None) {
         Ok(db_status) => {
-            db_status.deactivate();
+            db_status.unlock();
             return 0;
         }
         Err(db_error) => db_error,
@@ -128,7 +128,7 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
             if let Err(error) = regenerate_caches(&db_path) {
                 println!("Error occured!\n{:?}", error);
 
-                db_status.deactivate();
+                db_status.unlock();
                 return -3;
                 //return error.into_code();
             }
@@ -137,7 +137,7 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
             if let Err(error) = regenerate_tag_sums(&db_path) {
                 println!("Error occured!\n{:?}", error);
 
-                db_status.deactivate();
+                db_status.unlock();
                 return -3;
                 //return error.into_code();
             }
@@ -146,7 +146,7 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
             if let Err(error) = merge_tags(&db_path, tag_1, tag_2) {
                 println!("Error occured!\n{:?}", error);
 
-                db_status.deactivate();
+                db_status.unlock();
                 return -3;
                 //return error.into_code();
             }
@@ -155,7 +155,7 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
             if let Err(error) = rename_tag(&db_path, old_tag, new_tag) {
                 println!("Error occured!\n{:?}", error);
 
-                db_status.deactivate();
+                db_status.unlock();
                 return -3;
                 //return error.into_code();
             }
@@ -163,7 +163,7 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
         ActiveTask::None => {}
     }
 
-    db_status.deactivate();
+    db_status.unlock();
 
     0
 }
@@ -183,7 +183,7 @@ pub unsafe extern "C" fn MergeTags(db_path_ptr: *const c_char, tag1: u16, tag2: 
     };
     /*
     let Ok(db_status) =
-        DBStatus::activate(db_path.to_path_buf(), ActiveTask::MergeTags(tag1, tag2))
+        DBStatus::lock(db_path.to_path_buf(), ActiveTask::MergeTags(tag1, tag2))
     else {
         println!("Database is busy! Aborting...");
         return -3;
@@ -192,12 +192,12 @@ pub unsafe extern "C" fn MergeTags(db_path_ptr: *const c_char, tag1: u16, tag2: 
     if let Err(error) = merge_tags_wrapper(&db_path, tag1, tag2) {
         println!("Error occured!\n{:?}", error);
 
-        //db_status.deactivate();
+        //db_status.unlock();
         return -3;
         //return error.into_code();
     }
 
-    //db_status.deactivate();
+    //db_status.unlock();
 
     0
 }
@@ -213,19 +213,19 @@ pub unsafe extern "C" fn RegenerateTagSums(db_path_ptr: *const c_char) -> i32 {
         Err(ec) => return ec,
     };
 
-    let Ok(db_status) = DBStatus::activate(&db_path, ActiveTask::RegenerateTagSums) else {
+    let Ok(db_status) = DBStatus::lock(&db_path, ActiveTask::RegenerateTagSums) else {
         println!("Database is busy! Aborting...");
         return -3;
     };
 
     if let Err(error) = regenerate_tag_sums(&db_path) {
         println!("Error occured! \n{:?}", error);
-        db_status.deactivate();
+        db_status.unlock();
         return -3;
         //return error.into_code();
     }
 
-    db_status.deactivate();
+    db_status.unlock();
 
     0
 }

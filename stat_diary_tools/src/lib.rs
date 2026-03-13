@@ -51,7 +51,7 @@ fn merge_tags_wrapper(
     tag_1: u16,
     tag_2: u16,
 ) -> Result<(), MergeTagsError> {
-    let Ok(db_status) = DBStatus::activate(db_path, ActiveTask::MergeTags(tag_1, tag_2)) else {
+    let Ok(db_status) = DBStatus::lock(db_path, ActiveTask::MergeTags(tag_1, tag_2)) else {
         println!("Database is busy! Aborting...");
         //return Err(MergeTagsError::DataBaseBusy);
         todo!();
@@ -61,10 +61,10 @@ fn merge_tags_wrapper(
     if let Err(error) = merge_tags(db_path, tag_1, tag_2) {
         //println!("Error occured!\n{:?}", error);
 
-        db_status.deactivate();
+        db_status.unlock();
         return Err(error);
     } // */
-    db_status.deactivate();
+    db_status.unlock();
 
     if let Err(e) = regenerate_tag_sums(db_path) {
         error!(
@@ -83,14 +83,14 @@ fn merge_tags_wrapper(
     println!("Regenerating Tag sums");
     if let Err(error) = regenerate_tag_sums(db_path) {
         println!("Error occured! \n{:?}", error);
-        //db_status.deactivate();
+        //db_status.unlock();
     }
 
     println!("Regenerating Caches");
     if let Err(error) = regenerate_caches(db_path) {
         println!("Error occured!\n{:?}", error);
 
-        //db_status.deactivate();
+        //db_status.unlock();
     }
 
     Ok(())
