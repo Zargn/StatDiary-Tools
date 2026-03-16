@@ -11,27 +11,31 @@ use crate::data_base::DataBase;
 
 /// Compresses the database at the provided path into a image stored at the provided image path.
 ///
-///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn CompressDBToImage(
     db_path_ptr: *const c_char,
-    result_path: *const c_char,
+    result_path_ptr: *const c_char,
 ) -> i32 {
     let data_base = match try_get_db(db_path_ptr) {
         Ok(db) => db,
         Err(ec) => return ec,
     };
 
-    let result_path = match try_ptr_to_string(result_path) {
+    let result_path = match try_ptr_to_string(result_path_ptr) {
         Ok(str) => str,
         Err(ec) => return ec,
     };
@@ -48,17 +52,22 @@ pub unsafe extern "C" fn CompressDBToImage(
 
 //
 
-///
+/// Attempts to extract a `DataBase` from the provided `db_image_path_ptr` into `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn ExtractDBFromImage(
     db_path_ptr: *const c_char,
@@ -88,17 +97,22 @@ pub unsafe extern "C" fn ExtractDBFromImage(
 
 //
 
-///
+/// Attempts to regenerate the cache files in the `DataBase` at the provided `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn RegenerateCaches(db_path_ptr: *const c_char) -> i32 {
     let data_base = match try_get_db(db_path_ptr) {
@@ -118,17 +132,22 @@ pub unsafe extern "C" fn RegenerateCaches(db_path_ptr: *const c_char) -> i32 {
 
 //
 
-///
+/// Attempts to resume any non-finished tasks in the `DataBase` at the provided `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
     let data_base = match try_get_db(db_path_ptr) {
@@ -148,17 +167,22 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
 
 //
 
-///
+/// Attempts to merge `tag1` into `tag2` in the `DataBase` at the provided `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn MergeTags(db_path_ptr: *const c_char, tag1: u16, tag2: u16) -> i32 {
     let data_base = match try_get_db(db_path_ptr) {
@@ -178,17 +202,22 @@ pub unsafe extern "C" fn MergeTags(db_path_ptr: *const c_char, tag1: u16, tag2: 
 
 //
 
-///
+/// Attempts to regenerate all tag sums in the provided `DataBase` at the provide `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn RegenerateTagSums(db_path_ptr: *const c_char) -> i32 {
     let data_base = match try_get_db(db_path_ptr) {
@@ -208,17 +237,22 @@ pub unsafe extern "C" fn RegenerateTagSums(db_path_ptr: *const c_char) -> i32 {
 
 //
 
-///
+/// Attempts to rename `old_tag_ptr` to `new_tag_ptr` in the `DataBase` at `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn RenameTag(
     db_path_ptr: *const c_char,
@@ -248,17 +282,22 @@ pub unsafe extern "C" fn RenameTag(
 
 //
 
-///
+/// Attempts to upgrade the `DataBase` at the proided `db_path_ptr` to the new format.
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path_ptr: *const c_char) -> i32 {
     let _data_base = match try_get_db(db_path_ptr) {
@@ -285,13 +324,18 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path_ptr: *const c_char) -> 
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 unsafe fn try_ptr_to_string(ptr: *const c_char) -> Result<String, i32> {
     if ptr.is_null() {
         return Err(-1);
@@ -311,13 +355,18 @@ unsafe fn try_ptr_to_string(ptr: *const c_char) -> Result<String, i32> {
 ///
 /// # Safety
 ///
-/// `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
-/// - `ptr` must be non-null.
-/// - `ptr` must point to a valid NUL-terminated C string.
-/// - The memory referenced by `ptr` must be valid for reads
-///   up to and including the terminating NUL byte.
-/// - The string must not be mutated for the duration of this call.
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
 unsafe fn try_get_db(db_path_ptr: *const c_char) -> Result<DataBase, i32> {
     let db_path_str = try_ptr_to_string(db_path_ptr)?;
     match DataBase::load(PathBuf::from(db_path_str)) {
