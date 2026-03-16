@@ -4,15 +4,16 @@ use std::{
 };
 
 use log::error;
+use walkdir::WalkDir;
 
 use crate::{
-    backup, cache_handling,
+    backup::{self, compress_to_image},
+    cache_handling,
+    data_entry::{DataFile, ReadDataFileError},
     db_path::{DataBasePath, DataBasePathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
-    merge_tags,
     stat_sums::{self, StatSumsError},
     tags::{TagList, TagsError},
-    MergeTagsError,
 };
 
 pub struct DataBase {
@@ -105,7 +106,6 @@ impl DataBase {
                     error!("rename_tag() failed due to: {e:?}");
                     return Err(e);
                 }
-                todo!();
             }
         }
 
@@ -200,8 +200,65 @@ impl DataBase {
         Ok(())
     }
 
-    pub fn compress_to_image() {}
+    // TODO: clean up backup.rs. Introduce better error handling.
+    /// Compresses the database to a png image saved at `target_path`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    pub fn compress_to_image(&self, target_path: &Path) -> Result<()> {
+        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
+
+        if let Err(e) = compress_to_image(&self.path, target_path) {
+            error!("compress_to_image() failed due to: {e:?}");
+            todo!();
+        }
+
+        db_status.unlock();
+
+        Ok(())
+    }
+
     pub fn upgrade_database() {}
+
+    /// Returns a `Vec` containing all data files in this database.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    /// * An io error occured.
+    /// * A walkdir error occured.
+    ///
+    /// **NOTE**: If a datafile is corrupted it will be skipped. The error is added to the log
+    /// instead of returned by this method.
+    pub fn data_files(&self) -> Result<Vec<DataFile>> {
+        let mut data_files = Vec::new();
+        for path in WalkDir::new(self.path.data()) {
+            let path = path?;
+            let filepath = path.path();
+
+            if !DataFile::is_data_file(filepath) {
+                continue;
+            }
+
+            let data_file = match DataFile::read_from_file(filepath) {
+                Ok(data_file) => data_file,
+                Err(ReadDataFileError::CorruptedDataFile) => {
+                    error!("Data file [{:?}] is corrupted! Skipping file...", filepath);
+                    continue;
+                }
+                Err(ReadDataFileError::Io(io_err)) => {
+                    return Err(Error::with_kind(ErrorKind::Io(io_err)))
+                }
+            };
+            data_files.push(data_file);
+        }
+        Ok(data_files)
+    }
 }
 
 //
@@ -211,17 +268,19 @@ impl DataBase {
 // Private functions
 impl DataBase {
     fn intr_rename_tag(&self, old_tag: String, new_tag: String) -> Result<()> {
-        let mut tags = TagList::from_file(&self.path)?;
-        tags.rename_tag(old_tag, new_tag)?;
-        tags.save()?;
+        TagList::from_file(&self.path)?
+            .rename_tag(old_tag, new_tag)?
+            .save()?;
         Ok(())
     }
 
     fn intr_merge_tags(&self, tag_1: u16, tag_2: u16) -> Result<()> {
-        // TODO Error handling...
-        if let Err(e) = merge_tags(&self.path, tag_1, tag_2) {
-            error!("merge_tags() failed due to: {e:?}");
-            return Err(e.into());
+        TagList::from_file(&self.path)?
+            .merge_tags(tag_1, tag_2)?
+            .save()?;
+
+        for mut data_file in self.data_files()? {
+            data_file.merge_tags(tag_1, tag_2).save()?;
         }
 
         if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
@@ -251,12 +310,16 @@ impl DataBase {
 
 #[derive(Debug)]
 pub struct Error {
-    kind: ErrorKind,
+    pub kind: ErrorKind,
 }
 
 impl Error {
     fn with_kind(kind: ErrorKind) -> Error {
         Self { kind }
+    }
+
+    pub fn code(&self) -> i32 {
+        self.kind.code()
     }
 }
 
@@ -288,6 +351,41 @@ pub enum ErrorKind {
     TagAlreadyExists,
 }
 
+impl ErrorKind {
+    /// Returns a `i32` value representing which `ErrorKind` this is.
+    ///
+    /// **Note:** Non-exhaustive list. Further errors might be added at a later date.
+    ///
+    /// # Codes
+    ///
+    /// * `1` => `Io`,
+    /// * `2` => `WalkDir`,
+    /// * `3` => `PathDoesNotExist`,
+    /// * `4` => `IsNotDataBase`,
+    /// * `5` => `DataBaseBusy`,
+    /// * `6` => `MissingData`,
+    /// * `7` => `UnknownTask`,
+    /// * `8` => `CorruptedTagsFile`,
+    /// * `9` => `UnknownTag`,
+    /// * `10` => `UnknownTagId`,
+    /// * `11` => `TagAlreadyExists`,
+    pub fn code(&self) -> i32 {
+        match self {
+            ErrorKind::Io(_) => 1,
+            ErrorKind::WalkDir(_) => 2,
+            ErrorKind::PathDoesNotExist => 3,
+            ErrorKind::IsNotDataBase => 4,
+            ErrorKind::DataBaseBusy => 5,
+            ErrorKind::MissingData => 6,
+            ErrorKind::UnknownTask => 7,
+            ErrorKind::CorruptedTagsFile => 8,
+            ErrorKind::UnknownTag(_) => 9,
+            ErrorKind::UnknownTagId(_) => 10,
+            ErrorKind::TagAlreadyExists => 11,
+        }
+    }
+}
+
 /*
 
 */
@@ -296,6 +394,14 @@ impl From<io::Error> for Error {
     fn from(value: io::Error) -> Self {
         Self {
             kind: ErrorKind::Io(value),
+        }
+    }
+}
+
+impl From<walkdir::Error> for Error {
+    fn from(value: walkdir::Error) -> Self {
+        Self {
+            kind: ErrorKind::WalkDir(value),
         }
     }
 }
@@ -349,6 +455,7 @@ impl From<TagsError> for Error {
     }
 }
 
+/*
 impl From<MergeTagsError> for Error {
     fn from(value: MergeTagsError) -> Self {
         match value {
@@ -357,4 +464,4 @@ impl From<MergeTagsError> for Error {
             MergeTagsError::Tags(tags_error) => tags_error.into(),
         }
     }
-}
+}*/

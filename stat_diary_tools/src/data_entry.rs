@@ -121,10 +121,11 @@ impl DataFile {
     /// Merges tag_2 into tag_1 in each data entry in this file.
     /// One way to visualise what this does is to imagine that the id of tag_2 is changed to the
     /// same as tag_1, after which any duplicate ids are removed.
-    pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) {
+    pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) -> &mut Self {
         for data_entry in &mut self.entries {
             data_entry.merge_tags(tag_1, tag_2);
         }
+        self
     }
 
     //
@@ -132,19 +133,19 @@ impl DataFile {
     //
 
     /// Saves this data file to the location it was read from. The old file is overwritten.
-    pub fn save(self) -> Result<(), io::Error> {
+    pub fn save(&mut self) -> Result<(), io::Error> {
         let mut tmp_path = self.file_path.clone();
         tmp_path.add_extension("tmp");
 
         let new_file = File::create(&tmp_path)?;
         let mut writer = BufWriter::new(new_file);
 
-        for data_entry in self.entries {
+        for data_entry in &self.entries {
             data_entry.write(&mut writer)?;
         }
         writer.flush()?;
 
-        fs::rename(tmp_path, self.file_path)?;
+        fs::rename(tmp_path, &self.file_path)?;
 
         Ok(())
     }

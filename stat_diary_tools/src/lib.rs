@@ -31,11 +31,13 @@ pub fn init_logger() -> Result<(), SetLoggerError> {
     log::set_boxed_logger(Box::new(DBLogger)).map(|()| log::set_max_level(LevelFilter::Info))
 }
 
+/*
 #[derive(Debug)]
 pub enum RegenCachesError {
     Io(io::Error),
     DBStatus(DBStatusError),
 }
+*/
 
 /*
 pub fn regenerate_caches_(db_path: &DataBasePath) -> Result<(), RegenCachesError> {
@@ -46,6 +48,7 @@ pub fn regenerate_caches_(db_path: &DataBasePath) -> Result<(), RegenCachesError
 
 //
 
+/*
 fn merge_tags_wrapper(
     db_path: &DataBasePath,
     tag_1: u16,
@@ -63,7 +66,7 @@ fn merge_tags_wrapper(
 
         db_status.unlock();
         return Err(error);
-    } // */
+    } //
     db_status.unlock();
 
     if let Err(e) = regenerate_tag_sums(db_path) {
@@ -94,12 +97,13 @@ fn merge_tags_wrapper(
     }
 
     Ok(())
-}
+}*/
 
 //
 
 //
 
+/*
 #[derive(Debug)]
 pub enum MergeTagsError {
     Io(io::Error),
@@ -123,8 +127,9 @@ impl From<TagsError> for MergeTagsError {
     fn from(value: TagsError) -> Self {
         Self::Tags(value)
     }
-}
+}*/
 
+/*
 fn merge_tags(db_path: &DataBasePath, tag_1: u16, tag_2: u16) -> Result<(), MergeTagsError> {
     let mut tags = TagList::from_file(db_path)?;
 
@@ -170,7 +175,7 @@ fn rename_tag(db_path: &DataBasePath, old_tag: String, new_tag: String) -> Resul
     let mut tags = TagList::from_file(db_path)?;
     tags.rename_tag(old_tag, new_tag)?;
     tags.save()
-}
+}*/
 
 //
 
