@@ -45,7 +45,7 @@ pub unsafe extern "C" fn CompressDBToImage(
         return error.code();
     }
 
-    1
+    0
 }
 
 //
@@ -90,7 +90,7 @@ pub unsafe extern "C" fn ExtractDBFromImage(
         return error.code();
     }
 
-    1
+    0
 }
 
 //

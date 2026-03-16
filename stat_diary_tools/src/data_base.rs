@@ -7,7 +7,7 @@ use log::error;
 use walkdir::WalkDir;
 
 use crate::{
-    backup::{self, compress_to_image},
+    backup::{self, compress_to_image, BackupImageError},
     cache_handling,
     data_entry::{DataFile, ReadDataFileError},
     db_path::{DataBasePath, DataBasePathError},
@@ -39,14 +39,6 @@ impl DataBase {
         })
     }
 
-    fn tmp() {
-        //
-        //let db = DataBase::load(PathBuf::new()).unwrap();
-
-        //
-        todo!();
-    }
-
     /// Attempts to extract a database from `img_path` into `db_path`.
     ///
     /// # Errors
@@ -59,6 +51,7 @@ impl DataBase {
     pub fn load_from_image(img_path: &Path, db_path: PathBuf) -> Result<DataBase> {
         if let Err(e) = backup::load_image(img_path, &db_path) {
             error!("DataBase::load_from_image could not load image! Error: {e:?}");
+            return Err(e.into());
         }
 
         Ok(DataBase {
@@ -129,7 +122,10 @@ impl DataBase {
     pub fn regen_caches(&self) -> Result<()> {
         let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateCaches)?;
 
-        cache_handling::regenerate_caches(&self.path)?;
+        if let Err(error) = cache_handling::regenerate_caches(&self.path) {
+            db_status.unlock();
+            return Err(error.into());
+        }
 
         db_status.unlock();
         Ok(())
@@ -147,7 +143,10 @@ impl DataBase {
     pub fn regen_tag_sums(&self) -> Result<()> {
         let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
-        stat_sums::regenerate_tag_sums(&self.path)?;
+        if let Err(error) = stat_sums::regenerate_tag_sums(&self.path) {
+            db_status.unlock();
+            return Err(error.into());
+        }
 
         db_status.unlock();
         Ok(())
@@ -169,7 +168,6 @@ impl DataBase {
 
         // TODO Error handling...
         if let Err(e) = self.intr_merge_tags(tag_1, tag_2) {
-            error!("merge_tags() failed due to: {e:?}");
             db_status.unlock();
             return Err(e);
         }
@@ -193,14 +191,16 @@ impl DataBase {
     pub fn rename_tag(&self, old_tag: String, new_tag: String) -> Result<()> {
         let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
-        self.intr_rename_tag(old_tag, new_tag)?;
+        if let Err(error) = self.intr_rename_tag(old_tag, new_tag) {
+            db_status.unlock();
+            return Err(error);
+        }
 
         db_status.unlock();
 
         Ok(())
     }
 
-    // TODO: clean up backup.rs. Introduce better error handling.
     /// Compresses the database to a png image saved at `target_path`.
     ///
     /// # Errors
@@ -209,14 +209,13 @@ impl DataBase {
     /// these cases:
     ///
     pub fn compress_to_image(&self, target_path: &Path) -> Result<()> {
-        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
-
-        if let Err(e) = compress_to_image(&self.path, target_path) {
-            error!("compress_to_image() failed due to: {e:?}");
-            todo!();
-        }
-
+        // TODO: Create a DBStatus::is_locked() function.
+        let db_status = DBStatus::lock(&self.path, ActiveTask::None)?;
         db_status.unlock();
+
+        if let Err(error) = compress_to_image(&self.path, target_path) {
+            return Err(error.into());
+        }
 
         Ok(())
     }
@@ -349,6 +348,10 @@ pub enum ErrorKind {
     UnknownTagId(u16),
     /// The proivded tag name already exists in the database.
     TagAlreadyExists,
+    /// The provided image is not a valid compressed database.
+    InvalidImage,
+    /// The database could not be zip compressed!
+    UnableToZip,
 }
 
 impl ErrorKind {
@@ -382,6 +385,8 @@ impl ErrorKind {
             ErrorKind::UnknownTag(_) => 9,
             ErrorKind::UnknownTagId(_) => 10,
             ErrorKind::TagAlreadyExists => 11,
+            ErrorKind::InvalidImage => 12,
+            ErrorKind::UnableToZip => 13,
         }
     }
 }
@@ -450,6 +455,18 @@ impl From<TagsError> for Error {
                 TagsError::UnknownTag(tag) => ErrorKind::UnknownTag(tag),
                 TagsError::UnknownId(id) => ErrorKind::UnknownTagId(id),
                 TagsError::TagAlreadyExists => ErrorKind::TagAlreadyExists,
+            },
+        }
+    }
+}
+
+impl From<BackupImageError> for Error {
+    fn from(value: BackupImageError) -> Self {
+        Self {
+            kind: match value {
+                BackupImageError::Io(e) => ErrorKind::Io(e),
+                BackupImageError::InvalidImage => ErrorKind::InvalidImage,
+                BackupImageError::UnableToZip => ErrorKind::UnableToZip,
             },
         }
     }
