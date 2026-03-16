@@ -117,7 +117,7 @@ impl TagList {
 
     /// Removes the provided tag_id and its linked tag name from the tag list.
     /// Will fail with a TagsError if the provided tag doesn't exist.
-    pub fn remove_tag(&mut self, tag_id: u16) -> Result<()> {
+    pub fn remove_tag(&mut self, tag_id: u16) -> Result<&mut Self> {
         let tag_str = self
             .id_str_map
             .remove(&tag_id)
@@ -127,7 +127,7 @@ impl TagList {
             .ok_or(TagsError::UnknownTag(tag_str))?;
 
         self.removed_ids.push(tag_id);
-        Ok(())
+        Ok(self)
     }
 
     //
@@ -137,7 +137,7 @@ impl TagList {
     /// Attempts to rename old_tag to new_tag while keeping the same tag_id.
     /// If old_tag doesn't exist a TagsError::UnknownTag will be returned.
     /// If new_tag already exists this will fail with a TagsError::TagAlreadyExists.
-    pub fn rename_tag(&mut self, old_tag: String, new_tag: String) -> Result<()> {
+    pub fn rename_tag(&mut self, old_tag: String, new_tag: String) -> Result<&mut Self> {
         if self.str_id_map.contains_key(&new_tag) {
             return Err(TagsError::TagAlreadyExists);
         }
@@ -149,7 +149,7 @@ impl TagList {
         self.str_id_map.insert(new_tag.clone(), tag_id);
         *self.id_str_map.entry(tag_id).or_default() = new_tag;
 
-        Ok(())
+        Ok(self)
     }
 
     //
@@ -159,12 +159,12 @@ impl TagList {
     /// Attempts to merge the tag_1 into tag_2.
     /// If any of the tags doesn't exist then a TagsError::UnknownId is returned.
     /// Otherwise tag_1 is removed from the tag list, leaving only tag_2.
-    pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) -> Result<()> {
+    pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) -> Result<&mut Self> {
         let _ = self.get_tag(tag_1)?;
         let _ = self.get_tag(tag_2)?;
 
         self.remove_tag(tag_1)?;
-        Ok(())
+        Ok(self)
     }
 
     //
@@ -176,7 +176,7 @@ impl TagList {
     ///
     /// Writes to a .tmp file which when completed is swapped with the original file, ensuring that
     /// no data is lost in the event of the program stopping mid-write.
-    pub fn save(self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         let tmp_path = self.db_path.root().join("tags.txt.tmp");
         let filepath = self.db_path.root().join("tags.txt");
 
