@@ -1,4 +1,8 @@
-use std::{error::Error, io::Cursor};
+use core::panic;
+use std::{
+    error::Error,
+    io::{self, Cursor},
+};
 
 use image::{ImageBuffer, ImageReader};
 use std::fs::File;
@@ -9,7 +13,10 @@ use zip::{result::ZipError, write::SimpleFileOptions, ZipArchive};
 
 use crate::db_path::DataBasePath;
 
-pub fn compress_to_image(db_path: &DataBasePath, result_path: &Path) -> Result<(), Box<dyn Error>> {
+pub fn compress_to_image(
+    db_path: &DataBasePath,
+    result_path: &Path,
+) -> Result<(), BackupImageError> {
     let method = zip::CompressionMethod::Ppmd;
 
     let data = zip_dir(db_path.root(), method)?;
@@ -58,19 +65,58 @@ fn get_byte(data: Option<&u8>) -> u8 {
     }
 }
 
-pub fn load_image(img_path: &Path, db_path: &Path) -> Result<(), Box<dyn Error>> {
+#[derive(Debug)]
+pub enum BackupImageError {
+    Io(io::Error),
+    InvalidImage,
+    UnableToZip,
+}
+
+impl From<io::Error> for BackupImageError {
+    fn from(value: io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+impl From<zip::result::ZipError> for BackupImageError {
+    fn from(value: zip::result::ZipError) -> Self {
+        log::error!("Could not zip database due to a [{value:?}] error!");
+        Self::UnableToZip
+    }
+}
+
+pub fn load_image(img_path: &Path, db_path: &Path) -> Result<(), BackupImageError> {
     let data = get_data_from_image(img_path)?;
     extract_db(db_path, data)
 }
 
-fn get_data_from_image(img_path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
-    let data = ImageReader::open(img_path)?.decode()?;
+fn get_data_from_image(img_path: &Path) -> Result<Vec<u8>, BackupImageError> {
+    let img_reader = match ImageReader::open(img_path) {
+        Ok(reader) => reader,
+        Err(error) => {
+            log::error!("Could not open reader for image at: {img_path:?} Error: {error:?}");
+            return Err(BackupImageError::InvalidImage);
+        }
+    };
+    let data = match img_reader.decode() {
+        Ok(data) => data,
+        Err(error) => {
+            log::error!("Could not decode image at: {img_path:?} Error: {error:?}");
+            return Err(BackupImageError::InvalidImage);
+        }
+    };
     let bytes = data.as_bytes();
     if bytes.iter().take(4).any(|b| *b != 255) {
-        return Err("This image does not hold a compressed database!".into());
+        return Err(BackupImageError::InvalidImage);
     }
     let (int_bytes, image_data) = bytes.split_at(4).1.split_at(size_of::<u32>());
-    let byte_count = u32::from_be_bytes(int_bytes.try_into()?);
+    let byte_count = u32::from_be_bytes(match int_bytes.try_into() {
+        Ok(uint) => uint,
+        Err(error) => {
+            log::error!("get_data_from_image(): Could not get byte count from image!");
+            return Err(BackupImageError::InvalidImage);
+        }
+    });
 
     let data: Vec<u8> = image_data
         .iter()
@@ -88,10 +134,7 @@ fn get_data_from_image(img_path: &Path) -> Result<Vec<u8>, Box<dyn Error>> {
 
 // Credit for most of the function below goes to the zip2 example at this link:
 // https://github.com/zip-rs/zip2/blob/b19f6707111bdbcd76ddebcbe7cbee246683e2d2/examples/write_dir.rs
-fn zip_dir(
-    src_dir: &Path,
-    method: zip::CompressionMethod,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+fn zip_dir(src_dir: &Path, method: zip::CompressionMethod) -> Result<Vec<u8>, BackupImageError> {
     if !Path::new(src_dir).is_dir() {
         return Err(ZipError::FileNotFound.into());
     }
@@ -105,11 +148,15 @@ fn zip_dir(
 
     for entry in walkdir.into_iter().filter_map(|e| e.ok()) {
         let path = entry.path();
-        let name = path.strip_prefix(src_dir)?;
-        let path_as_string = name
-            .to_str()
-            .map(str::to_owned)
-            .ok_or_else(|| format!("{name:?} is a Non UTF-8 Path"))?;
+        let name = path.strip_prefix(src_dir)
+            .expect(
+                "This should never panic as this path is created by a WalkDir that traverses the same src_dir that is used by the strip_prefix method. I.e. the path should always start with src_dir, meaning strip_prefix(src_dir) will always succeed."
+                );
+
+        let path_as_string = name.to_str().map(str::to_owned).ok_or_else(|| {
+            log::error!("Could not zip database due to [{name:?}] not being valid unicode!");
+            BackupImageError::UnableToZip
+        })?;
 
         // Write file or directory explicitly
         // Some unzip tools unzip files with directory paths correctly, some do not!
@@ -135,7 +182,7 @@ fn zip_dir(
 
 //
 
-fn extract_db(target_path: &Path, data: Vec<u8>) -> Result<(), Box<dyn Error>> {
+fn extract_db(target_path: &Path, data: Vec<u8>) -> Result<(), BackupImageError> {
     let mut archive = match ZipArchive::new(Cursor::new(data)) {
         Ok(archive) => archive,
         Err(e) => {
