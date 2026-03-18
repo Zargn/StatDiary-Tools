@@ -113,6 +113,14 @@ pub struct DBStatus {
 }
 
 impl DBStatus {
+    /// Returns whether the database is locked or not.
+    pub fn is_locked(db_path: &DataBasePath) -> bool {
+        let filepath = db_path.root().join(STATUSFILENAME);
+        filepath.exists()
+    }
+
+    /// Attempts to lock the database. If the database is already locked a
+    /// DBStatusError::DataBaseBusy is returner.
     pub fn lock(db_path: &DataBasePath, task: ActiveTask) -> Result<DBStatus> {
         let filepath = db_path.root().join(STATUSFILENAME);
 
@@ -140,6 +148,7 @@ impl DBStatus {
 
     //
 
+    /// Releases the lock of the database.
     pub fn unlock(self) {
         let _removal_result = std::fs::remove_file(self.status_path);
     }
