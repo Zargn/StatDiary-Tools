@@ -1,4 +1,5 @@
 use std::{
+    fs::File,
     io,
     path::{Path, PathBuf},
 };
@@ -15,6 +16,7 @@ use crate::{
     db_status::{ActiveTask, DBStatus, DBStatusError},
     stat_sums::{self, StatSumsError},
     tags::{TagList, TagsError},
+    update_database,
 };
 
 pub struct DataBase {
@@ -221,7 +223,25 @@ impl DataBase {
         Ok(())
     }
 
-    pub fn upgrade_database() {}
+    pub fn upgrade_database(db_path: &Path) -> Result<i32> {
+        // Mark the db with a .db_marker to ensure it can be recognised as a db by the load()
+        // method.
+        File::create(db_path.join(".db_marker"))?;
+        let database = DataBase::load(db_path.to_path_buf())?;
+
+        if let Err(e) = update_database::temporary_update_database(&database.path) {
+            log::error!(
+                "Encountered error: [{:?}] when attempting to upgrade the database at path: {:?}",
+                e,
+                db_path
+            );
+            return Ok(-1);
+        }
+
+        // TODO:
+
+        Ok(0)
+    }
 
     /// Returns a `Vec` containing all data files in this database.
     ///

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     error::Error,
-    fs::File,
+    fs::{self, File},
     io::{self, BufWriter, Write},
     path::Path,
 };
@@ -9,8 +9,8 @@ use std::{
 use walkdir::WalkDir;
 
 use crate::{
-    db_path::DataBasePath, stat_sums::regenerate_tag_sums, tags::TagList, utilities::read_lines,
-    DATAFILEEXTENSION,
+    cache_handling::regenerate_caches, db_path::DataBasePath, stat_sums::regenerate_tag_sums,
+    tags::TagList, utilities::read_lines, DATAFILEEXTENSION,
 };
 
 pub fn temporary_update_database(db_path: &DataBasePath) -> Result<(), Box<dyn Error>> {
@@ -45,9 +45,16 @@ pub fn temporary_update_database(db_path: &DataBasePath) -> Result<(), Box<dyn E
     }
 
     tags_writer.flush()?;
-    //update_averages(Path::new(db_path))?;
+
+    // Remove the old averages folder and replace it with tag_sums.
+    fs::remove_dir_all(db_path.root().join("averages"))?;
     if let Err(e) = regenerate_tag_sums(db_path) {
         println!("regenerate_tag_sums error occured!\n{:?}", e);
+    }
+
+    // Generate caches.
+    if let Err(e) = regenerate_caches(db_path) {
+        println!("regenerate_caches error occured!\n{:?}", e);
     }
 
     Ok(())

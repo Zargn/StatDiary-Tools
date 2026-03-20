@@ -316,20 +316,17 @@ pub unsafe extern "C" fn RenameTag(
 /// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path_ptr: *const c_char) -> i32 {
-    let _data_base = match try_get_db(db_path_ptr) {
+    let data_base_path = match try_ptr_to_string(db_path_ptr) {
         Ok(db_path) => db_path,
         Err(ec) => return ec,
     };
 
-    /*
-    if let Err(error) = DataBase::upgrade_database() {
+    if let Err(error) = DataBase::upgrade_database(Path::new(&data_base_path)) {
         println!("Error occured!\n{:?}", error);
-        //return error.into_code();
-    }*/
+        return error.code();
+    }
 
-    todo!();
-
-    // TODO: Regenerate caches too!
+    0
 }
 
 //
