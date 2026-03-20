@@ -9,7 +9,9 @@ use crate::data_base::DataBase;
 
 //
 
-/// Compresses the database at the provided path into a image stored at the provided image path.
+/// CompressDBToImage(`db_path_ptr`, `result_path_ptr`);
+///
+/// Compresses the database at `db_path_ptr` into a image stored at `result_path_ptr`.
 ///
 /// # Safety
 ///
@@ -52,6 +54,8 @@ pub unsafe extern "C" fn CompressDBToImage(
 
 //
 
+/// ExtractDBFromImage(`db_image_path_ptr`, `db_path_ptr`);
+///
 /// Attempts to extract a `DataBase` from the provided `db_image_path_ptr` into `db_path_ptr`.
 ///
 /// # Safety
@@ -70,8 +74,8 @@ pub unsafe extern "C" fn CompressDBToImage(
 /// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
 pub unsafe extern "C" fn ExtractDBFromImage(
-    db_path_ptr: *const c_char,
     db_image_path_ptr: *const c_char,
+    db_path_ptr: *const c_char,
 ) -> i32 {
     let db_path = match try_ptr_to_string(db_path_ptr) {
         Ok(str) => str,
