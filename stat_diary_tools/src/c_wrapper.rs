@@ -9,13 +9,13 @@ use crate::data_base::DataBase;
 
 //
 
-/// CompressDBToImage(`db_path_ptr`, `result_path_ptr`);
+/// fn CompressDBToImage(`db_path_ptr`, `result_path_ptr`);
 ///
 /// Compresses the database at `db_path_ptr` into a image stored at `result_path_ptr`.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -54,13 +54,13 @@ pub unsafe extern "C" fn CompressDBToImage(
 
 //
 
-/// ExtractDBFromImage(`db_image_path_ptr`, `db_path_ptr`);
+/// fn ExtractDBFromImage(`db_image_path_ptr`, `db_path_ptr`);
 ///
 /// Attempts to extract a `DataBase` from the provided `db_image_path_ptr` into `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -101,11 +101,13 @@ pub unsafe extern "C" fn ExtractDBFromImage(
 
 //
 
+/// fn RegenerateCaches(`db_path_ptr`);
+///
 /// Attempts to regenerate the cache files in the `DataBase` at the provided `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -136,11 +138,13 @@ pub unsafe extern "C" fn RegenerateCaches(db_path_ptr: *const c_char) -> i32 {
 
 //
 
+/// fn ResumeTask(`db_path_ptr`);
+///
 /// Attempts to resume any non-finished tasks in the `DataBase` at the provided `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -171,11 +175,13 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
 
 //
 
+/// fn MergeTags(`db_path_ptr`, `tag1`, `tag2`);
+///
 /// Attempts to merge `tag1` into `tag2` in the `DataBase` at the provided `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -206,11 +212,13 @@ pub unsafe extern "C" fn MergeTags(db_path_ptr: *const c_char, tag1: u16, tag2: 
 
 //
 
-/// Attempts to regenerate all tag sums in the provided `DataBase` at the provide `db_path_ptr`.
+/// fn RegenerateTagSums(`db_path_ptr`);
+///
+/// Attempts to regenerate all tag sums in the `DataBase` at the provided `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -241,11 +249,13 @@ pub unsafe extern "C" fn RegenerateTagSums(db_path_ptr: *const c_char) -> i32 {
 
 //
 
+/// fn RenameTag(`db_path_ptr`, `old_tag_ptr`, `new_tag_ptr`);
+///
 /// Attempts to rename `old_tag_ptr` to `new_tag_ptr` in the `DataBase` at `db_path_ptr`.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -286,11 +296,13 @@ pub unsafe extern "C" fn RenameTag(
 
 //
 
+/// fn TemporaryUpdateDatabase(`db_path_ptr`) 6
+///
 /// Attempts to upgrade the `DataBase` at the proided `db_path_ptr` to the new format.
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -328,7 +340,7 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path_ptr: *const c_char) -> 
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
@@ -359,7 +371,7 @@ unsafe fn try_ptr_to_string(ptr: *const c_char) -> Result<String, i32> {
 ///
 /// # Safety
 ///
-/// Any arguemnt mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
 ///
 /// * The memory pointed to by `ptr` must contain a valid nul terminator at the
 ///   end of the string.
