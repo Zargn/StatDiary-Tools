@@ -1,11 +1,6 @@
-use core::panic;
-use std::{
-    error::Error,
-    io::{self, Cursor},
-};
-
-use image::{ImageBuffer, ImageReader};
+use image::{ImageBuffer, ImageError, ImageReader};
 use std::fs::File;
+use std::io::{self, Cursor};
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -13,63 +8,12 @@ use zip::{result::ZipError, write::SimpleFileOptions, ZipArchive};
 
 use crate::db_path::DataBasePath;
 
-pub fn compress_to_image(
-    db_path: &DataBasePath,
-    result_path: &Path,
-) -> Result<(), BackupImageError> {
-    let method = zip::CompressionMethod::Ppmd;
-
-    let data = zip_dir(db_path.root(), method)?;
-    convert_to_image(result_path, data);
-
-    Ok(())
-}
-
-//
-
-//
-
-fn convert_to_image(target_path: &Path, data: Vec<u8>) {
-    let byte_count = data.len() as u32;
-    let img_size = ((byte_count as f64 + 8.0) / 4.0).sqrt().ceil() as u32;
-
-    println!("Byte count: {}\nImg size: {}", byte_count, img_size);
-
-    let mut imgbuf = ImageBuffer::new(img_size, img_size);
-
-    let bytes = byte_count.to_be_bytes();
-    let markers = [image::Rgba([255, 255, 255, 255]), image::Rgba(bytes)];
-
-    for (i, (_, _, pixel)) in imgbuf.enumerate_pixels_mut().take(2).enumerate() {
-        *pixel = markers[i];
-    }
-
-    let mut data_iter = data.iter();
-
-    for (_, _, pixel) in imgbuf.enumerate_pixels_mut().skip(2) {
-        *pixel = image::Rgba([
-            get_byte(data_iter.next()),
-            get_byte(data_iter.next()),
-            get_byte(data_iter.next()),
-            get_byte(data_iter.next()),
-        ]);
-    }
-
-    imgbuf.save(target_path).unwrap();
-}
-
-fn get_byte(data: Option<&u8>) -> u8 {
-    match data {
-        Some(b) => *b,
-        None => 0,
-    }
-}
-
 #[derive(Debug)]
 pub enum BackupImageError {
     Io(io::Error),
     InvalidImage,
     UnableToZip,
+    Image(ImageError),
 }
 
 impl From<io::Error> for BackupImageError {
@@ -85,54 +29,34 @@ impl From<zip::result::ZipError> for BackupImageError {
     }
 }
 
-pub fn load_image(img_path: &Path, db_path: &Path) -> Result<(), BackupImageError> {
-    let data = get_data_from_image(img_path)?;
-    extract_db(db_path, data)
-}
-
-fn get_data_from_image(img_path: &Path) -> Result<Vec<u8>, BackupImageError> {
-    let img_reader = match ImageReader::open(img_path) {
-        Ok(reader) => reader,
-        Err(error) => {
-            log::error!("Could not open reader for image at: {img_path:?} Error: {error:?}");
-            return Err(BackupImageError::InvalidImage);
-        }
-    };
-    let data = match img_reader.decode() {
-        Ok(data) => data,
-        Err(error) => {
-            log::error!("Could not decode image at: {img_path:?} Error: {error:?}");
-            return Err(BackupImageError::InvalidImage);
-        }
-    };
-    let bytes = data.as_bytes();
-    if bytes.iter().take(4).any(|b| *b != 255) {
-        return Err(BackupImageError::InvalidImage);
+impl From<ImageError> for BackupImageError {
+    fn from(value: ImageError) -> Self {
+        Self::Image(value)
     }
-    let (int_bytes, image_data) = bytes.split_at(4).1.split_at(size_of::<u32>());
-    let byte_count = u32::from_be_bytes(match int_bytes.try_into() {
-        Ok(uint) => uint,
-        Err(error) => {
-            log::error!("get_data_from_image(): Could not get byte count from image!");
-            return Err(BackupImageError::InvalidImage);
-        }
-    });
-
-    let data: Vec<u8> = image_data
-        .iter()
-        .take(byte_count as usize)
-        .map(|b| *b)
-        .collect::<Vec<u8>>();
-
-    println!("byte_count: {}\nimg data len: {}", byte_count, data.len());
-    Ok(data)
 }
 
 //
 
 //
 
-// Credit for most of the function below goes to the zip2 example at this link:
+/// Compress the database at `db_path` into a image and save said image to `result_path`.
+pub fn compress_database_to_image(
+    db_path: &DataBasePath,
+    result_path: &Path,
+) -> Result<(), BackupImageError> {
+    let method = zip::CompressionMethod::Ppmd;
+
+    let data = zip_dir(db_path.root(), method)?;
+    save_to_image(result_path, data)?;
+
+    Ok(())
+}
+
+//
+
+//
+
+// Credit for the core of the function below goes to the zip2 example at this link:
 // https://github.com/zip-rs/zip2/blob/b19f6707111bdbcd76ddebcbe7cbee246683e2d2/examples/write_dir.rs
 fn zip_dir(src_dir: &Path, method: zip::CompressionMethod) -> Result<Vec<u8>, BackupImageError> {
     if !Path::new(src_dir).is_dir() {
@@ -182,6 +106,98 @@ fn zip_dir(src_dir: &Path, method: zip::CompressionMethod) -> Result<Vec<u8>, Ba
 
 //
 
+fn save_to_image(target_path: &Path, data: Vec<u8>) -> Result<(), BackupImageError> {
+    let byte_count = data.len() as u32;
+    let img_size = ((byte_count as f64 + 8.0) / 4.0).sqrt().ceil() as u32;
+
+    println!("Byte count: {}\nImg size: {}", byte_count, img_size);
+
+    let mut imgbuf = ImageBuffer::new(img_size, img_size);
+
+    let bytes = byte_count.to_be_bytes();
+    let markers = [image::Rgba([255, 255, 255, 255]), image::Rgba(bytes)];
+
+    // Mark the first pixel with 4 max bytes and the second pixel with the length of the data.
+    for (i, (_, _, pixel)) in imgbuf.enumerate_pixels_mut().take(2).enumerate() {
+        *pixel = markers[i];
+    }
+
+    let mut data_iter = data.into_iter();
+
+    for (_, _, pixel) in imgbuf.enumerate_pixels_mut().skip(2) {
+        *pixel = image::Rgba([
+            data_iter.next().unwrap_or_default(), // Since the amount of data bytes is known it is
+            data_iter.next().unwrap_or_default(), // fine to write a few 0 bytes if the data
+            data_iter.next().unwrap_or_default(), // doesn't have the length to perfectly match the
+            data_iter.next().unwrap_or_default(), // pixel count. They wont be read regardless.
+        ]);
+    }
+
+    imgbuf.save(target_path)?;
+    Ok(())
+}
+
+//
+
+//
+
+/// Attempt to unzip a database stored in the pixel data of the image at the provided `img_path`.
+/// If successful the database is stored at the provided `db_path`.
+pub fn load_image(img_path: &Path, db_path: &Path) -> Result<(), BackupImageError> {
+    let data = get_data_from_image(img_path)?;
+    extract_db(db_path, data)
+}
+
+//
+
+//
+
+/// Attempts to get the data hidden in the pixels from the image at the provided `img_path`.
+fn get_data_from_image(img_path: &Path) -> Result<Vec<u8>, BackupImageError> {
+    let img_reader = match ImageReader::open(img_path) {
+        Ok(reader) => reader,
+        Err(error) => {
+            log::error!("Could not open reader for image at: {img_path:?} Error: {error:?}");
+            return Err(BackupImageError::Image(error.into()));
+        }
+    };
+    let data = match img_reader.decode() {
+        Ok(data) => data,
+        Err(error) => {
+            log::error!("Could not decode image at: {img_path:?} Error: {error:?}");
+            return Err(BackupImageError::Image(error));
+        }
+    };
+    let bytes = data.as_bytes();
+    if bytes.iter().take(4).any(|b| *b != 255) {
+        return Err(BackupImageError::InvalidImage);
+    }
+    let (int_bytes, image_data) = bytes.split_at(4).1.split_at(size_of::<u32>());
+    let byte_count = u32::from_be_bytes(match int_bytes.try_into() {
+        Ok(uint) => uint,
+        Err(error) => {
+            log::error!(
+                "get_data_from_image(): Could not get byte count from image due to: {error:?}"
+            );
+            return Err(BackupImageError::InvalidImage);
+        }
+    });
+
+    let data: Vec<u8> = image_data
+        .iter()
+        .take(byte_count as usize)
+        .copied()
+        .collect::<Vec<u8>>();
+
+    println!("byte_count: {}\nimg data len: {}", byte_count, data.len());
+    Ok(data)
+}
+
+//
+
+//
+
+/// Attempts to extract the database into `target_path` from the zip archive `data`.
 fn extract_db(target_path: &Path, data: Vec<u8>) -> Result<(), BackupImageError> {
     let mut archive = match ZipArchive::new(Cursor::new(data)) {
         Ok(archive) => archive,

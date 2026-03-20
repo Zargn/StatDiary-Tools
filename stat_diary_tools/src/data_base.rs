@@ -3,11 +3,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use image::ImageError;
 use log::error;
 use walkdir::WalkDir;
 
 use crate::{
-    backup::{self, compress_to_image, BackupImageError},
+    backup::{self, BackupImageError},
     cache_handling,
     data_entry::{DataFile, ReadDataFileError},
     db_path::{DataBasePath, DataBasePathError},
@@ -213,7 +214,7 @@ impl DataBase {
         let db_status = DBStatus::lock(&self.path, ActiveTask::None)?;
         db_status.unlock();
 
-        if let Err(error) = compress_to_image(&self.path, target_path) {
+        if let Err(error) = backup::compress_database_to_image(&self.path, target_path) {
             return Err(error.into());
         }
 
@@ -352,6 +353,8 @@ pub enum ErrorKind {
     InvalidImage,
     /// The database could not be zip compressed!
     UnableToZip,
+    /// Wrapper object for a `ImageError`.
+    Image(ImageError),
 }
 
 impl ErrorKind {
@@ -372,6 +375,9 @@ impl ErrorKind {
     /// * `9` => `UnknownTag`,
     /// * `10` => `UnknownTagId`,
     /// * `11` => `TagAlreadyExists`,
+    /// * `12` => `InvalidImage`,
+    /// * `13` => `UnableToZip`,
+    /// * `14` => `Image`,
     pub fn code(&self) -> i32 {
         match self {
             ErrorKind::Io(_) => 1,
@@ -387,6 +393,7 @@ impl ErrorKind {
             ErrorKind::TagAlreadyExists => 11,
             ErrorKind::InvalidImage => 12,
             ErrorKind::UnableToZip => 13,
+            ErrorKind::Image(_) => 14,
         }
     }
 }
@@ -467,6 +474,7 @@ impl From<BackupImageError> for Error {
                 BackupImageError::Io(e) => ErrorKind::Io(e),
                 BackupImageError::InvalidImage => ErrorKind::InvalidImage,
                 BackupImageError::UnableToZip => ErrorKind::UnableToZip,
+                BackupImageError::Image(ie) => ErrorKind::Image(ie),
             },
         }
     }
