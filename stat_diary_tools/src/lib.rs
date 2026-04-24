@@ -15,6 +15,7 @@ mod tags;
 mod update_database;
 
 const DATAFILEEXTENSION: &str = "statdiary";
+const DIARYFILEEXTENSION: &str = "diary";
 
 pub fn init_logger() -> Result<(), SetLoggerError> {
     log::set_boxed_logger(Box::new(DBLogger)).map(|()| log::set_max_level(LevelFilter::Info))

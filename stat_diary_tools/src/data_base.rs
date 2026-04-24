@@ -5,7 +5,7 @@ use std::{
 };
 
 use image::ImageError;
-use log::error;
+use log::{error, info};
 use walkdir::WalkDir;
 
 use crate::{
@@ -52,10 +52,19 @@ impl DataBase {
     /// * `img_path` does not lead to a image.
     /// * `img_path` leads to a image but said image is not a valid compressed database.
     pub fn load_from_image(img_path: &Path, db_path: PathBuf) -> Result<DataBase> {
+        info!(
+            "Attempting to extract a database from the image at path: {:?}",
+            img_path
+        );
         if let Err(e) = backup::load_image(img_path, &db_path) {
             error!("DataBase::load_from_image could not load image! Error: {e:?}");
             return Err(e.into());
         }
+
+        info!(
+            "Successfully extracted database from {:?} into {:?}",
+            img_path, db_path
+        );
 
         Ok(DataBase {
             path: DataBasePath::new(db_path)?,
@@ -123,6 +132,7 @@ impl DataBase {
     /// If it encounters a unknown or corrupted file a warning or error is logged. The function
     /// will then continue on skipping the bad file.
     pub fn regen_caches(&self) -> Result<()> {
+        log::info!("Attempting to regenerate caches...");
         let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateCaches)?;
 
         if let Err(error) = cache_handling::regenerate_caches(&self.path) {
@@ -131,6 +141,7 @@ impl DataBase {
         }
 
         db_status.unlock();
+        log::info!("Finished regenerating caches!");
         Ok(())
     }
 
@@ -144,6 +155,7 @@ impl DataBase {
     /// * The database is busy.
     /// * An io error occured.
     pub fn regen_tag_sums(&self) -> Result<()> {
+        log::info!("Attempting to regenerate tag sums...");
         let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
         if let Err(error) = stat_sums::regenerate_tag_sums(&self.path) {
@@ -152,6 +164,7 @@ impl DataBase {
         }
 
         db_status.unlock();
+        log::info!("Finished regenerating tag sums!");
         Ok(())
     }
 
@@ -167,6 +180,10 @@ impl DataBase {
     /// * An io error occured.
     /// * `tag_1` or `tag_2` does not exist.
     pub fn merge_tags(&self, tag_1: u16, tag_2: u16) -> Result<()> {
+        info!(
+            "Attempting to merge tag id: {} into tag id: {}",
+            tag_1, tag_2
+        );
         let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
         // TODO Error handling...
@@ -192,15 +209,16 @@ impl DataBase {
     /// * `old_tag` doesn't exist.
     /// * `new_tag` already exists. (Meaning a merge is required instead.)
     pub fn rename_tag(&self, old_tag: String, new_tag: String) -> Result<()> {
+        info!("Attempting to rename tag: [{}] to [{}]", old_tag, new_tag);
         let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
 
-        if let Err(error) = self.intr_rename_tag(old_tag, new_tag) {
+        if let Err(error) = self.intr_rename_tag(old_tag.clone(), new_tag.clone()) {
             db_status.unlock();
             return Err(error);
         }
 
         db_status.unlock();
-
+        info!("Successfully renamed tag: [{}] to [{}]", old_tag, new_tag);
         Ok(())
     }
 
@@ -213,12 +231,21 @@ impl DataBase {
     ///
     pub fn compress_to_image(&self, target_path: &Path) -> Result<()> {
         // TODO: Create a DBStatus::is_locked() function.
+        info!(
+            "Attempting to compress the database into a image at path: {:?}",
+            target_path
+        );
         let db_status = DBStatus::lock(&self.path, ActiveTask::None)?;
         db_status.unlock();
 
         if let Err(error) = backup::compress_database_to_image(&self.path, target_path) {
             return Err(error.into());
         }
+
+        info!(
+            "Successfully saved compressed database at {:?}",
+            target_path
+        );
 
         Ok(())
     }
@@ -303,19 +330,29 @@ impl DataBase {
             data_file.merge_tags(tag_1, tag_2).save()?;
         }
 
+        log::info!(
+            "Successfully merged tag id: {} into tag id: {}",
+            tag_1,
+            tag_2
+        );
+
+        log::info!("merge_tags(): Attempting to regenerate caches...");
         if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
             error!(
                 "merge_tags() received {:?} when attempting to regenerate tag sums!",
                 e
             );
         }
+        log::info!("merge_tags(): Finished regenerating caches!");
 
+        log::info!("merge_tags(): Attempting to regenerate tag sums...");
         if let Err(e) = cache_handling::regenerate_caches(&self.path) {
             error!(
                 "merge_tags() received {:?} when attempting to regenerate caches!",
                 e
             );
         }
+        log::info!("merge_tags(): Finished regenerating tag sums!");
 
         Ok(())
     }

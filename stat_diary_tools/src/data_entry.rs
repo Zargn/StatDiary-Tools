@@ -5,9 +5,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use log::warn;
+use log::{info, warn};
 
-use crate::DATAFILEEXTENSION;
+use crate::{DATAFILEEXTENSION, DIARYFILEEXTENSION};
 
 #[derive(Debug)]
 pub enum ReadDataFileError {
@@ -83,23 +83,31 @@ impl DataFile {
     /// If a non-datafile of expected name is encountered this will return false without
     /// logging the reason.
     pub fn is_data_file(file: &Path) -> bool {
+        // A directory can not be a datafile.
         if file.is_dir() {
-            warn!("Ignoring unexpected directory in month folder! {:?}", file);
-            return false;
-        }
-
-        // Don't give warning for expected non-data files
-        if file.file_name() == Some(OsStr::new("month_cache.txt")) {
+            //info!("DataFile: Ignoring directory: {:?}", file);
             return false;
         }
 
         let Some(file_extension) = file.extension() else {
-            warn!("Ignoring file due to missing file extension! {:?}", file);
+            warn!(
+                "DataFile::is_data_file(): Ignoring file due to missing file extension! {:?}",
+                file
+            );
             return false;
         };
 
+        // Don't give warning for expected non-data files.
+        // This includes cache files and text diary files.
+        if file.file_name() == Some(OsStr::new("month_cache.txt"))
+            || file.file_name() == Some(OsStr::new("year_cache.txt"))
+            || file_extension == DIARYFILEEXTENSION
+        {
+            return false;
+        }
+
         if file_extension != DATAFILEEXTENSION {
-            warn!("Ignoring file: {:?}", file);
+            warn!("DataFile::is_data_file(): Found unexpected file {:?}", file);
             return false;
         }
         true

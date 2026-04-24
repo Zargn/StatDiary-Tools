@@ -98,7 +98,6 @@ impl Overview {
 
 /// Regenerates all caches in the provided database.
 pub fn regenerate_caches(db_path: &DataBasePath) -> Result<(), io::Error> {
-    log::info!("Regenerating caches...");
     for year_path in read_sorted_directory(&db_path.data())? {
         if year_path.is_file() {
             warn!(
