@@ -3,6 +3,9 @@ name = "stat_diary_tools"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+crate-type = ["cdylib"]
+
 [dependencies]
 walkdir = "2.5.0"
 zip = "7.2.0"
