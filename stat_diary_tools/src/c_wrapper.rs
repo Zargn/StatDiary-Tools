@@ -5,6 +5,41 @@ use std::{
 
 use crate::data_base::DataBase;
 
+/// fn InitLogger(`logfile_path_ptr`);
+///
+/// WARNING: Function is incomplete. Currently logs to std::out meaning the logfile_path_ptr
+/// isn't actually used yet.
+/// Sets the logfile path to `logfile_path_ptr`.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn InitLogger(logfile_path_ptr: *const c_char) -> i32 {
+    let logfile_path = match try_ptr_to_string(logfile_path_ptr) {
+        Ok(str) => str,
+        Err(ec) => return ec,
+    };
+
+    if let Err(error) = DataBase::init_logger(PathBuf::from(logfile_path)) {
+        log::error!("CompressDBToImage error occured: {error:?}");
+        return error.code();
+    }
+
+    0
+}
+
 //
 
 //

@@ -14,6 +14,7 @@ use crate::{
     data_entry::{DataFile, ReadDataFileError},
     db_path::{DataBasePath, DataBasePathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
+    logger::DBLogger,
     stat_sums::{self, StatSumsError},
     tags::{TagList, TagsError},
     update_database,
@@ -27,6 +28,12 @@ type Result<T> = std::result::Result<T, Error>;
 
 // Public functions
 impl DataBase {
+    pub fn init_logger(logfile_path: PathBuf) -> Result<()> {
+        log::set_boxed_logger(Box::new(DBLogger::new(logfile_path)?))
+            .map(|()| log::set_max_level(log::LevelFilter::Info));
+        Ok(())
+    }
+
     /// Attempts to load the database at `db_path`.
     ///
     /// # Errors
