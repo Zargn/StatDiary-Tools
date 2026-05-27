@@ -26,6 +26,21 @@ pub fn init_logger() -> Result<(), SetLoggerError> {
 
 //
 
+// TODO:
+// ModifyEntry function. (Change the tags and scores for one entry)
+// AddEntry function. (Can use the ModifyEntry function but needs to have
+//                     a check to ensure no entry exists there yet.)
+// Rust-Only displayentry function for testing purposes.
+// GetTagId function. (Returns the provided tags id, -1 if it doesn't exist.)
+// AddTag function. (Adds the tag as long as it doesn't exist already.
+//                   Returns the new tags id once added.)
+// RemoveTag function.
+//
+// Analytical functions? Potential examples:
+// - Rank tags by scores.
+// - Rank tags by day-scores.
+// - Rank tags by timespan scores.
+
 mod utilities {
     use std::{
         fs::{self, File},
