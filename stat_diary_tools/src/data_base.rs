@@ -11,7 +11,7 @@ use walkdir::WalkDir;
 use crate::{
     backup::{self, BackupImageError},
     cache_handling,
-    data_entry::{DataFile, ReadDataFileError},
+    data_entry::DataFile,
     db_path::{DataBasePath, DataBasePathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
     logger::DBLogger,
@@ -301,17 +301,32 @@ impl DataBase {
 
             let data_file = match DataFile::read_from_file(filepath) {
                 Ok(data_file) => data_file,
-                Err(ReadDataFileError::CorruptedDataFile) => {
+                Err(crate::data_entry::Error::CorruptedDataFile) => {
                     error!("Data file [{:?}] is corrupted! Skipping file...", filepath);
                     continue;
                 }
-                Err(ReadDataFileError::Io(io_err)) => {
+                Err(crate::data_entry::Error::Io(io_err)) => {
                     return Err(Error::with_kind(ErrorKind::Io(io_err)))
                 }
+                _ => continue, // Remaining errors can't occur here.
             };
             data_files.push(data_file);
         }
         Ok(data_files)
+    }
+
+    pub fn modify_data_entry(
+        &self,
+        year: i32,
+        month: i32,
+        day: i32,
+        hour: i32,
+    ) -> Result<DataFile> {
+        todo!();
+    }
+
+    pub fn add_data_entry(&self, year: i32, month: i32, day: i32, hour: i32) -> Result<DataFile> {
+        todo!();
     }
 }
 

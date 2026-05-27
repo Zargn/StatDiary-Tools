@@ -8,10 +8,7 @@ use std::{
 use log::error;
 use walkdir::WalkDir;
 
-use crate::{
-    data_entry::{DataFile, ReadDataFileError},
-    db_path::DataBasePath,
-};
+use crate::{data_entry::DataFile, db_path::DataBasePath};
 
 //
 
@@ -92,11 +89,12 @@ pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<(), io::Error> {
 
         let data_file = match DataFile::read_from_file(filepath) {
             Ok(data_file) => data_file,
-            Err(ReadDataFileError::CorruptedDataFile) => {
+            Err(crate::data_entry::Error::CorruptedDataFile) => {
                 error!("Data file [{:?}] is corrupted! This file will not be represented in the stat sums!", filepath);
                 continue;
             }
-            Err(ReadDataFileError::Io(io_err)) => return Err(io_err),
+            Err(crate::data_entry::Error::Io(io_err)) => return Err(io_err),
+            _ => continue, // Remaining errors can not occur here.
         };
 
         for data_entry in data_file.entries() {

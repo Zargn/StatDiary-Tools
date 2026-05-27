@@ -8,12 +8,7 @@ use std::{
 
 use log::{error, warn};
 
-use crate::{
-    data_entry::{self, DataFile, ReadDataFileError},
-    db_path::DataBasePath,
-    utilities::read_sorted_directory,
-    DATAFILEEXTENSION,
-};
+use crate::{data_entry::DataFile, db_path::DataBasePath, utilities::read_sorted_directory};
 
 //
 
@@ -190,11 +185,12 @@ fn create_month_cache(month_folder: &Path) -> Result<Overview, io::Error> {
 
         let data_file = match DataFile::read_from_file(&file) {
             Ok(data_file) => data_file,
-            Err(ReadDataFileError::CorruptedDataFile) => {
+            Err(crate::data_entry::Error::CorruptedDataFile) => {
                 error!("Data file [{:?}] is corrupted! This file will not be represented in the cache!", file);
                 continue;
             }
-            Err(ReadDataFileError::Io(io_err)) => return Err(io_err),
+            Err(crate::data_entry::Error::Io(io_err)) => return Err(io_err),
+            _ => continue, // Remaining errors can not occur here.
         };
 
         for data in data_file.entries() {

@@ -9,15 +9,43 @@ use log::{info, warn};
 
 use crate::{DATAFILEEXTENSION, DIARYFILEEXTENSION};
 
+/*
 #[derive(Debug)]
-pub enum ReadDataFileError {
-    Io(io::Error),
-    CorruptedDataFile,
+pub struct Error {
+    pub kind: ErrorKind,
 }
 
-impl From<io::Error> for ReadDataFileError {
+impl Error {
+    fn with_kind(kind: ErrorKind) -> Error {
+        Self { kind }
+    }
+}
+
+impl From<io::Error> for Error {
     fn from(value: io::Error) -> Self {
-        Self::Io(value)
+        Self::with_kind(ErrorKind::Io(value))
+    }
+}
+
+#[derive(Debug)]
+pub enum ErrorKind {
+    Io(io::Error),
+    EntryAlreadyExists,
+    CorruptedDataFile,
+    InvalidDate,
+} */
+
+#[derive(Debug)]
+pub enum Error {
+    Io(io::Error),
+    EntryAlreadyExists,
+    CorruptedDataFile,
+    InvalidDate,
+}
+
+impl From<io::Error> for Error {
+    fn from(value: io::Error) -> Self {
+        Error::Io(value)
     }
 }
 
@@ -29,13 +57,13 @@ pub struct DataFile {
 
 /// Reads the byte at the provided index in the list of bytes, returning the byte or a
 /// ReadDataFileError::CorruptedDataFile error if the index is out of range.
-fn read_at_index(bytes: &[u8], index: usize) -> Result<&u8, ReadDataFileError> {
-    bytes.get(index).ok_or(ReadDataFileError::CorruptedDataFile)
+fn read_at_index(bytes: &[u8], index: usize) -> Result<&u8, Error> {
+    bytes.get(index).ok_or(Error::CorruptedDataFile)
 }
 
 impl DataFile {
     /// Reads all entries in the provided file and returns a list of assembled DataEntry structs
-    pub fn read_from_file(file_path: &Path) -> Result<DataFile, ReadDataFileError> {
+    pub fn read_from_file(file_path: &Path) -> Result<DataFile, Error> {
         let bytes: Vec<u8> = io::BufReader::new(File::open(file_path)?)
             .bytes()
             .map_while(Result::ok)
@@ -72,6 +100,27 @@ impl DataFile {
             entries,
             file_path: file_path.to_path_buf(),
         })
+    }
+
+    pub fn get_data_file_path(year: u8, month: u8, day: u8) -> Result<PathBuf, Error> {
+        todo!();
+    }
+
+    pub fn open_data_file(file_path: &Path) -> Result<DataFile, Error> {
+        let Some(file_dir) = file_path.parent() else {
+            log::warn!(
+                "DataFile::open_data_file(): {:?}.parent() was None!",
+                file_path
+            );
+            return Err(Error::InvalidDate);
+        };
+        fs::create_dir_all(file_dir)?;
+
+        if file_path.exists() {
+            return DataFile::read_from_file(file_path);
+        }
+
+        todo!();
     }
 
     //
