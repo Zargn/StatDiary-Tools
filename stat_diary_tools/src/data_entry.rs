@@ -6,6 +6,7 @@ use std::{
 };
 
 use log::{info, warn};
+use time::Date;
 
 use crate::{DATAFILEEXTENSION, DIARYFILEEXTENSION};
 
@@ -102,10 +103,6 @@ impl DataFile {
         })
     }
 
-    pub fn get_data_file_path(year: u8, month: u8, day: u8) -> Result<PathBuf, Error> {
-        todo!();
-    }
-
     pub fn open_data_file(file_path: &Path) -> Result<DataFile, Error> {
         let Some(file_dir) = file_path.parent() else {
             log::warn!(
@@ -120,6 +117,22 @@ impl DataFile {
             return DataFile::read_from_file(file_path);
         }
 
+        let datafile = DataFile {
+            entries: Vec::new(),
+            file_path: file_path.to_path_buf(),
+        };
+
+        Ok(datafile)
+    }
+
+    /// Inserts the new entry at its hour index, overwriting any existing entry already there.
+    pub fn overwrite_entry(new_entry: DataEntry) -> Result<(), Error> {
+        todo!();
+    }
+
+    /// Adds the new entry to the datafile.
+    /// Returns an error if a entry already exist with the same hour.
+    pub fn add_entry(new_entry: DataEntry) -> Result<(), Error> {
         todo!();
     }
 

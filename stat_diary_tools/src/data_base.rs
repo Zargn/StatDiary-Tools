@@ -6,6 +6,7 @@ use std::{
 
 use image::ImageError;
 use log::{error, info};
+use time::Date;
 use walkdir::WalkDir;
 
 use crate::{
@@ -17,7 +18,7 @@ use crate::{
     logger::DBLogger,
     stat_sums::{self, StatSumsError},
     tags::{TagList, TagsError},
-    update_database,
+    update_database, DATAFILEEXTENSION,
 };
 
 pub struct DataBase {
@@ -336,6 +337,29 @@ impl DataBase {
 
 // Private functions
 impl DataBase {
+    pub fn get_data_file_path(&self, year: i32, month: u8, day: u8) -> Result<PathBuf> {
+        let month =
+            time::Month::try_from(month).map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
+        let date = Date::from_calendar_date(year, month, day)
+            .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
+
+        let filename = format!(
+            "{}-{}.{}",
+            date.day(),
+            date.weekday().number_days_from_monday(),
+            DATAFILEEXTENSION
+        );
+
+        let data_file_path = self.path.data().join(Path::new(&format!(
+            "{}/{}/{}",
+            date.year(),
+            date.month() as u8,
+            filename
+        )));
+
+        Ok(data_file_path)
+    }
+
     fn intr_rename_tag(&self, old_tag: String, new_tag: String) -> Result<()> {
         TagList::from_file(&self.path)?
             .rename_tag(old_tag, new_tag)?
@@ -434,6 +458,8 @@ pub enum ErrorKind {
     UnableToZip,
     /// Wrapper object for a `ImageError`.
     Image(ImageError),
+    /// The provided date is not valid!
+    InvalidDate,
 }
 
 impl ErrorKind {
@@ -473,6 +499,7 @@ impl ErrorKind {
             ErrorKind::InvalidImage => 12,
             ErrorKind::UnableToZip => 13,
             ErrorKind::Image(_) => 14,
+            ErrorKind::InvalidDate => 15,
         }
     }
 }
