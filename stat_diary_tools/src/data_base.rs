@@ -195,7 +195,7 @@ impl DataBase {
             "Attempting to merge tag id: {} into tag id: {}",
             tag_1, tag_2
         );
-        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
+        let db_status = DBStatus::lock(&self.path, ActiveTask::MergeTags(tag_1, tag_2))?;
 
         // TODO Error handling...
         if let Err(e) = self.intr_merge_tags(tag_1, tag_2) {
@@ -221,7 +221,10 @@ impl DataBase {
     /// * `new_tag` already exists. (Meaning a merge is required instead.)
     pub fn rename_tag(&self, old_tag: String, new_tag: String) -> Result<()> {
         info!("Attempting to rename tag: [{}] to [{}]", old_tag, new_tag);
-        let db_status = DBStatus::lock(&self.path, ActiveTask::RegenerateTagSums)?;
+        let db_status = DBStatus::lock(
+            &self.path,
+            ActiveTask::RenameTag(old_tag.clone(), new_tag.clone()),
+        )?;
 
         if let Err(error) = self.intr_rename_tag(old_tag.clone(), new_tag.clone()) {
             db_status.unlock();
