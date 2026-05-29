@@ -25,12 +25,7 @@ impl log::Log for DBLogger {
                 record.args()
             ))?; */
 
-            println!(
-                "{:?}: {} - {}",
-                std::time::Instant::now(),
-                record.level(),
-                record.args()
-            );
+            println!("[time]: {} - {}", record.level(), record.args());
         }
     }
 
@@ -39,8 +34,9 @@ impl log::Log for DBLogger {
 
 impl DBLogger {
     pub fn new(logfile_path: PathBuf) -> Result<DBLogger, io::Error> {
-        let logfile = OpenOptions::new().append(true).open(logfile_path)?;
-        let writer = BufWriter::new(logfile);
+        let logfile = OpenOptions::new().append(true).open(logfile_path);
+        println!("logfile::new(): {:?}", logfile);
+        let writer = BufWriter::new(logfile?);
 
         Ok(DBLogger { writer })
     }

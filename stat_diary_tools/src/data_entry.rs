@@ -6,8 +6,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use log::{info, warn};
-use time::Date;
+use log::warn;
 
 use crate::{DATAFILEEXTENSION, DIARYFILEEXTENSION};
 
@@ -43,6 +42,7 @@ pub enum Error {
     EntryAlreadyExists,
     CorruptedDataFile,
     InvalidDate,
+    InvalidData,
 }
 
 impl From<io::Error> for Error {
@@ -127,14 +127,18 @@ impl DataFile {
     }
 
     /// Inserts the new entry at its hour index, overwriting any existing entry already there.
-    pub fn overwrite_entry(new_entry: DataEntry) -> Result<(), Error> {
-        todo!();
+    pub fn overwrite_entry(&mut self, new_entry: DataEntry) {
+        self.entries.insert(new_entry.hour, new_entry);
     }
 
     /// Adds the new entry to the datafile.
     /// Returns an error if a entry already exist with the same hour.
-    pub fn add_entry(new_entry: DataEntry) -> Result<(), Error> {
-        todo!();
+    pub fn add_entry(&mut self, new_entry: DataEntry) -> Result<(), Error> {
+        if self.entries.contains_key(&new_entry.hour) {
+            return Err(Error::EntryAlreadyExists);
+        }
+        self.entries.insert(new_entry.hour, new_entry);
+        Ok(())
     }
 
     //
@@ -227,6 +231,7 @@ impl DataFile {
 //
 
 /// Contains one statdiary data entry.
+#[derive(Clone)]
 pub struct DataEntry {
     pub hour: u8,
     pub mental_score: u8,
@@ -242,6 +247,51 @@ impl DataEntry {
             physical_score,
             tags,
         }
+    }
+
+    pub fn from_c_data(data: &[i32]) -> Result<DataEntry, Error> {
+        if data.len() < 3 {
+            log::error!("DataEntry::from_c_data(): Data array was too short! Len was {} when 3 is mandatory!", data.len())
+        }
+
+        let hour = {
+            if !(0..24).contains(&data[0]) {
+                log::error!(
+                    "DataEntry::from_c_data(): Hour [{}] is out of range!",
+                    data[0]
+                );
+                return Err(Error::InvalidData);
+            }
+            data[0] as u8
+        };
+        let m_score = Self::validate_score(data[1])?;
+        let p_score = Self::validate_score(data[2])?;
+
+        let mut tags = Vec::new();
+
+        for tag in data.iter().skip(3) {
+            let Ok(tag_id) = u16::try_from(*tag) else {
+                log::error!(
+                    "DataEntry::from_c_data(): Provided tag id: [{}] does not fit in a u16 tag id!",
+                    tag
+                );
+                return Err(Error::InvalidData);
+            };
+            tags.push(tag_id);
+        }
+
+        Ok(DataEntry::new(hour, m_score, p_score, tags))
+    }
+
+    fn validate_score(score: i32) -> Result<u8, Error> {
+        if !(0..=100).contains(&score) {
+            log::error!(
+                "DataEntry::from_c_data(): Score [{}] is out of range!",
+                score
+            );
+            return Err(Error::InvalidData);
+        }
+        Ok(score as u8)
     }
 
     //

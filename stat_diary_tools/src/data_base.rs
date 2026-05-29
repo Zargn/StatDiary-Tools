@@ -12,7 +12,7 @@ use walkdir::WalkDir;
 use crate::{
     backup::{self, BackupImageError},
     cache_handling,
-    data_entry::DataFile,
+    data_entry::{self, DataEntry, DataFile},
     db_path::{DataBasePath, DataBasePathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
     logger::DBLogger,
@@ -30,8 +30,11 @@ type Result<T> = std::result::Result<T, Error>;
 // Public functions
 impl DataBase {
     pub fn init_logger(logfile_path: PathBuf) -> Result<()> {
-        log::set_boxed_logger(Box::new(DBLogger::new(logfile_path)?))
-            .map(|()| log::set_max_level(log::LevelFilter::Info));
+        println!(
+            "{:?}",
+            log::set_boxed_logger(Box::new(DBLogger::new(logfile_path)?))
+                .map(|()| log::set_max_level(log::LevelFilter::Info)),
+        );
         Ok(())
     }
 
@@ -316,18 +319,57 @@ impl DataBase {
         Ok(data_files)
     }
 
-    pub fn modify_data_entry(
+    /// Inserts the provided `DataEntry` in the `DataFile` for the provided date, overwriting any
+    /// existing entry at the specific hour.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    /// * The provided date is invalid.
+    pub fn insert_data_entry(
         &self,
         year: i32,
         month: i32,
         day: i32,
-        hour: i32,
-    ) -> Result<DataFile> {
-        todo!();
+        new_entry: DataEntry,
+    ) -> Result<()> {
+        let filepath = self.get_data_file_path(year, month, day)?;
+        let mut datafile = DataFile::open_data_file(&filepath)?;
+        datafile.overwrite_entry(new_entry.clone());
+        datafile.save()?;
+
+        // TODO: Update stat sums and caches with the modified data entry.
+        // NOTE: The old entry has been removed, meaning we need to account for that when updating
+        //       the caches and stat sums.
+        Ok(())
     }
 
-    pub fn add_data_entry(&self, year: i32, month: i32, day: i32, hour: i32) -> Result<DataFile> {
-        todo!();
+    /// Adds the provided `DataEntry` to the `DataFile` matching the provided `year`, `month`, and
+    /// `day`.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    /// * The provided date is invalid.
+    /// * A `DataEntry` already exists at the hour specified.
+    pub fn add_data_entry(
+        &self,
+        year: i32,
+        month: i32,
+        day: i32,
+        new_entry: DataEntry,
+    ) -> Result<()> {
+        let filepath = self.get_data_file_path(year, month, day)?;
+        let mut datafile = DataFile::open_data_file(&filepath)?;
+        datafile.add_entry(new_entry.clone())?;
+        datafile.save()?;
+
+        // TODO: Update stat sums and caches with the added data entry.
+        Ok(())
     }
 }
 
@@ -337,10 +379,10 @@ impl DataBase {
 
 // Private functions
 impl DataBase {
-    pub fn get_data_file_path(&self, year: i32, month: u8, day: u8) -> Result<PathBuf> {
-        let month =
-            time::Month::try_from(month).map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
-        let date = Date::from_calendar_date(year, month, day)
+    pub fn get_data_file_path(&self, year: i32, month: i32, day: i32) -> Result<PathBuf> {
+        let month = time::Month::try_from(month as u8)
+            .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
+        let date = Date::from_calendar_date(year, month, day as u8)
             .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
 
         let filename = format!(
@@ -460,6 +502,12 @@ pub enum ErrorKind {
     Image(ImageError),
     /// The provided date is not valid!
     InvalidDate,
+    /// An entry already exists at the provided hour!
+    EntryAlreadyExists,
+    /// A datafile was corrupted!
+    CorruptedDataFile,
+    /// The provided data for a `DataEntry` was invalid!
+    InvalidData,
 }
 
 impl ErrorKind {
@@ -500,6 +548,9 @@ impl ErrorKind {
             ErrorKind::UnableToZip => 13,
             ErrorKind::Image(_) => 14,
             ErrorKind::InvalidDate => 15,
+            ErrorKind::EntryAlreadyExists => 16,
+            ErrorKind::CorruptedDataFile => 17,
+            ErrorKind::InvalidData => 18,
         }
     }
 }
@@ -581,6 +632,20 @@ impl From<BackupImageError> for Error {
                 BackupImageError::InvalidImage => ErrorKind::InvalidImage,
                 BackupImageError::UnableToZip => ErrorKind::UnableToZip,
                 BackupImageError::Image(ie) => ErrorKind::Image(ie),
+            },
+        }
+    }
+}
+
+impl From<data_entry::Error> for Error {
+    fn from(value: data_entry::Error) -> Self {
+        Self {
+            kind: match value {
+                data_entry::Error::Io(e) => ErrorKind::Io(e),
+                data_entry::Error::EntryAlreadyExists => ErrorKind::EntryAlreadyExists,
+                data_entry::Error::InvalidDate => ErrorKind::InvalidDate,
+                data_entry::Error::CorruptedDataFile => ErrorKind::CorruptedDataFile,
+                data_entry::Error::InvalidData => ErrorKind::InvalidData,
             },
         }
     }

@@ -41,11 +41,18 @@ pub fn init_logger() -> Result<(), SetLoggerError> {
 // - Rank tags by day-scores.
 // - Rank tags by timespan scores.
 
-mod utilities {
+pub mod utilities {
     use std::{
         fs::{self, File},
         io::{self, BufRead},
         path::{Path, PathBuf},
+    };
+
+    use crate::{
+        data_base::DataBase,
+        data_entry::{DataEntry, DataFile},
+        db_path::DataBasePath,
+        tags::TagList,
     };
 
     //
@@ -73,6 +80,37 @@ mod utilities {
         files.sort();
         Ok(files)
     }
+
+    pub fn print_data_file(datafile: &DataFile, taglist: &TagList) {
+        let mut entries: Vec<&DataEntry> = datafile.entries().values().collect();
+        entries.sort_by_key(|a| a.hour);
+        for entry in entries {
+            print!(
+                "[{}] ms: {}, ps: {}, tags:",
+                entry.hour, entry.mental_score, entry.physical_score
+            );
+            for tag in &entry.tags {
+                print!(" {}", taglist.get_tag(*tag).unwrap());
+            }
+            println!();
+        }
+    }
+
+    pub fn get_taglist(db_path: PathBuf) -> TagList {
+        TagList::from_file(&DataBasePath::new(db_path).unwrap()).unwrap()
+    }
+
+    pub fn get_datafile(database: &DataBase, year: i32, month: i32, day: i32) -> DataFile {
+        let filepath = database.get_data_file_path(year, month, day).unwrap();
+        DataFile::open_data_file(&filepath).unwrap()
+    }
+
+    /*
+    fn into_sorted_vec() -> Vec<(u16, u16)> {
+        let mut tags: Vec<(u16, u16)> = self.tags.into_iter().collect();
+        tags.sort_by(|a, b| b.1.cmp(&a.1));
+        tags
+    }*/
 }
 
 #[cfg(test)]

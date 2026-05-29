@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::data_base::DataBase;
+use crate::{
+    data_base::{self, DataBase},
+    data_entry::DataEntry,
+};
 
 /// fn InitLogger(`logfile_path_ptr`);
 ///
@@ -358,6 +361,125 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path_ptr: *const c_char) -> 
 
     if let Err(error) = DataBase::upgrade_database(Path::new(&data_base_path)) {
         println!("Error occured!\n{:?}", error);
+        return error.code();
+    }
+
+    0
+}
+
+//
+
+//
+
+/// fn InsertDataEntry(`db_path_ptr`, `year`, `month`, `day`, `data`, `data_length`);
+///
+/// Attempts to insert the `DataEntry` stored in the `data` parameter to the `DataFile` matching the
+/// provided `year`, `month` and `day` in the `DataBase` at the provided `db_path_ptr`.
+/// Any existing entry at the target location is overwritten.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn InsertDataEntry(
+    db_path_ptr: *const c_char,
+    year: i32,
+    month: i32,
+    day: i32,
+    data: *const i32,
+    data_length: i32,
+) -> i32 {
+    if data.is_null() {
+        return -3;
+    }
+
+    let data = unsafe { std::slice::from_raw_parts(data, data_length as usize) };
+
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+
+    let data_entry = match DataEntry::from_c_data(data) {
+        Ok(data_entry) => data_entry,
+        Err(error) => {
+            log::error!("InsertDataEntry error occured! {error:?}");
+            return data_base::Error::from(error).code();
+        }
+    };
+
+    if let Err(error) = data_base.insert_data_entry(year, month, day, data_entry) {
+        log::error!("InsertDataEntry error occured: {error:?}");
+        return error.code();
+    }
+
+    0
+}
+
+//
+
+//
+
+/// fn AddDataEntry(`db_path_ptr`, `year`, `month`, `day`, `data`, `data_length`);
+///
+/// Attempts to add the `DataEntry` stored in the `data` parameter to the `DataFile` matching the
+/// provided `year`, `month` and `day` in the `DataBase` at the provided `db_path_ptr`.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn AddDataEntry(
+    db_path_ptr: *const c_char,
+    year: i32,
+    month: i32,
+    day: i32,
+    data: *const i32,
+    data_length: i32,
+) -> i32 {
+    if data.is_null() {
+        return -3;
+    }
+
+    let data = unsafe { std::slice::from_raw_parts(data, data_length as usize) };
+
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+
+    let data_entry = match DataEntry::from_c_data(data) {
+        Ok(data_entry) => data_entry,
+        Err(error) => {
+            log::error!("AddDataEntry error occured! {error:?}");
+            return data_base::Error::from(error).code();
+        }
+    };
+
+    if let Err(error) = data_base.add_data_entry(year, month, day, data_entry) {
+        log::error!("AddDataEntry error occured: {error:?}");
         return error.code();
     }
 
