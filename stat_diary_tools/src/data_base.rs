@@ -371,6 +371,14 @@ impl DataBase {
         // TODO: Update stat sums and caches with the added data entry.
         Ok(())
     }
+
+    pub fn add_tag(&self, tag_name: String) -> Result<()> {
+        //DBStatus::lock(&self.path, ActiveTask::None)?.unlock();
+
+        TagList::from_file(&self.path)?.add_tag(tag_name)?.save()?;
+
+        Ok(())
+    }
 }
 
 //

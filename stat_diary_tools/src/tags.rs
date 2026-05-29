@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{self, BufWriter, Read, Write},
+    path::Path,
 };
 
 use crate::{db_path::DataBasePath, utilities::read_lines};
@@ -23,6 +24,8 @@ impl From<io::Error> for TagsError {
 
 type Result<T> = std::result::Result<T, TagsError>;
 
+const RECLAIMEDTAGSFILE: &str = "reclaimed.tags";
+
 /// This is a in-memory representation of a tag list.
 /// It provides a variety of functions, including getting the tag name from a id, or a id from a
 /// tag name.
@@ -31,6 +34,7 @@ type Result<T> = std::result::Result<T, TagsError>;
 pub struct TagList {
     id_str_map: HashMap<u16, String>,
     str_id_map: HashMap<String, u16>,
+    next_id: u16,
     removed_ids: Vec<u16>,
     db_path: DataBasePath,
 }
@@ -44,6 +48,7 @@ impl TagList {
 
         let mut id_str_map = HashMap::new();
         let mut str_id_map = HashMap::new();
+        let mut next_id = 0;
         for line in read_lines(filepath)? {
             let mut parts = line.split(' ');
             let (id, tag) = (
@@ -56,6 +61,8 @@ impl TagList {
                     .next()
                     .ok_or(TagsError::CorruptedTagsFile(line.clone()))?,
             );
+
+            next_id = next_id.max(id);
 
             if str_id_map.insert(tag.to_string(), id).is_some() {
                 return Err(TagsError::CorruptedTagsFile(
@@ -70,12 +77,61 @@ impl TagList {
             }
         }
 
+        let removed_ids = {
+            let reclaimed_tags_path = db_path.root().join(RECLAIMEDTAGSFILE);
+            if Path::exists(&reclaimed_tags_path) {
+                Self::load_reclaimed_ids(&reclaimed_tags_path)?
+            } else {
+                Vec::new()
+            }
+        };
+
+        next_id += 1; // Add one from the last id to get the next id.
+
         Ok(TagList {
             id_str_map,
             str_id_map,
-            removed_ids: Vec::new(),
+            next_id,
+            removed_ids,
             db_path: db_path.clone(),
         })
+    }
+
+    //
+
+    //
+
+    fn load_reclaimed_ids(file_path: &Path) -> Result<Vec<u16>> {
+        let bytes: Vec<u8> = io::BufReader::new(File::open(file_path)?)
+            .bytes()
+            .map_while(std::result::Result::ok)
+            .collect::<Vec<u8>>();
+
+        if !bytes.len().is_multiple_of(2) {
+            log::error!("Tags::load_reclaimed_ids(): Reclaimed id file doesn't have a even number of bytes!");
+            return Err(TagsError::CorruptedTagsFile(
+                "Reclaimed tags file was corrupted!".to_string(),
+            ));
+        }
+
+        let mut reclaimed_tags = Vec::new();
+        let mut i = 0;
+        while i < bytes.len() - 1 {
+            let tag_id = ((*bytes
+                .get(i)
+                .ok_or(TagsError::CorruptedTagsFile("This can't fail".to_string()))?
+                as u16)
+                << 8)
+                | *bytes
+                    .get(i + 1)
+                    .ok_or(TagsError::CorruptedTagsFile("This can't fail".to_string()))?
+                    as u16;
+            i += 2;
+
+            reclaimed_tags.push(tag_id);
+        }
+
+        Ok(reclaimed_tags)
     }
 
     //
@@ -109,6 +165,38 @@ impl TagList {
     /// Returns if the provided tag_id exists or not.
     pub fn tag_exists(&self, tag_id: u16) -> bool {
         self.id_str_map.contains_key(&tag_id)
+    }
+
+    /// Adds the provided id to the tags list. When selecting id reclaimed id's will be
+    /// prioritized.
+    pub fn add_tag(&mut self, tag_name: String) -> Result<&mut Self> {
+        if self.str_id_map.contains_key(&tag_name) {
+            return Err(TagsError::TagAlreadyExists);
+        }
+
+        let id = {
+            if !self.removed_ids.is_empty() {
+                self.removed_ids.swap_remove(0) // removed_ids isn't empty so index 0 always exist.
+            } else {
+                let id = self.next_id;
+                self.next_id += 1;
+                id
+            }
+        };
+
+        if self.str_id_map.insert(tag_name.clone(), id).is_some() {
+            return Err(TagsError::CorruptedTagsFile(
+                "Duplicate tags found in tags file!".to_string(),
+            ));
+        }
+
+        if self.id_str_map.insert(id, tag_name).is_some() {
+            return Err(TagsError::CorruptedTagsFile(
+                "Duplicate tag ids found in tags file!".to_string(),
+            ));
+        }
+
+        Ok(self)
     }
 
     //
@@ -191,6 +279,10 @@ impl TagList {
 
         if !self.removed_ids.is_empty() {
             self.save_removed_ids()?;
+        } else if Path::exists(&self.db_path.root().join(RECLAIMEDTAGSFILE)) {
+            // Propegate error just in case but this should never fail since we only run this IF
+            // the file does exist.
+            fs::remove_file(self.db_path.root().join(RECLAIMEDTAGSFILE))?;
         }
 
         Ok(())
@@ -206,15 +298,18 @@ impl TagList {
     /// no data is lost in the event of the program stopping mid-write.
     fn save_removed_ids(&self) -> Result<()> {
         let tmp_path = self.db_path.root().join("reclaimed.tags.tmp");
-        let filepath = self.db_path.root().join("reclaimed.tags");
+        let filepath = self.db_path.root().join(RECLAIMEDTAGSFILE);
 
         let mut writer = BufWriter::new(File::create(&tmp_path)?);
 
+        // Since we load any reclaimed ids when creating the struct we don't need to read them when
+        // we save it.
+        /*
         if let Ok(mut file) = File::open(&filepath) {
             let mut bytes = Vec::new();
             file.read_to_end(&mut bytes)?;
             writer.write_all(&bytes)?;
-        }
+        }*/
 
         for tag_id in &self.removed_ids {
             writer.write_all(&tag_id.to_be_bytes())?;

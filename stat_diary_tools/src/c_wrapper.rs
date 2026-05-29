@@ -490,6 +490,47 @@ pub unsafe extern "C" fn AddDataEntry(
 
 //
 
+/// fn AddTag(`db_path_ptr`, `tag_name_ptr`);
+///
+/// Attempts to add the tag name provided with `tag_name_ptr` to the database at the path specified
+/// by `db_path_ptr`.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn AddTag(db_path_ptr: *const c_char, tag_name_ptr: *const c_char) -> i32 {
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+    let Ok(tag_name) = try_ptr_to_string(tag_name_ptr) else {
+        return -2;
+    };
+
+    if let Err(error) = data_base.add_tag(tag_name) {
+        log::error!("AddTag error occured: {error:?}");
+        return error.code();
+    }
+
+    0
+}
+
+//
+
+//
+
 /// Attempts to create a rust `String` using the provided `ptr`.
 ///
 /// # Safety
