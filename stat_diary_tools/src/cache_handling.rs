@@ -193,7 +193,7 @@ fn create_month_cache(month_folder: &Path) -> Result<Overview, io::Error> {
             _ => continue, // Remaining errors can not occur here.
         };
 
-        for data in data_file.entries() {
+        for data in data_file.entries().values() {
             overview.m_score.add(data.mental_score);
             overview.p_score.add(data.physical_score);
 

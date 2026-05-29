@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ffi::OsStr,
     fs::{self, File},
     io::{self, BufWriter, Read, Write},
@@ -52,7 +53,7 @@ impl From<io::Error> for Error {
 
 /// Contains all data entries for one data file and the filepath to said file.
 pub struct DataFile {
-    entries: Vec<DataEntry>,
+    entries: HashMap<u8, DataEntry>,
     file_path: PathBuf,
 }
 
@@ -72,7 +73,7 @@ impl DataFile {
 
         let mut i = 0;
 
-        let mut entries = Vec::new();
+        let mut entries = HashMap::new();
 
         while i < bytes.len() {
             let hour = read_at_index(&bytes, i)?;
@@ -94,7 +95,7 @@ impl DataFile {
             }
 
             let data_entry = DataEntry::new(*hour, *mental_score, *physical_score, tags);
-            entries.push(data_entry);
+            entries.insert(*hour, data_entry);
         }
 
         Ok(DataFile {
@@ -118,7 +119,7 @@ impl DataFile {
         }
 
         let datafile = DataFile {
-            entries: Vec::new(),
+            entries: HashMap::new(),
             file_path: file_path.to_path_buf(),
         };
 
@@ -179,8 +180,8 @@ impl DataFile {
 
     //
 
-    /// Returns a reference to the internal list of data entries.
-    pub fn entries(&self) -> &Vec<DataEntry> {
+    /// Returns a reference to the internal HashMap of data entries.
+    pub fn entries(&self) -> &HashMap<u8, DataEntry> {
         &self.entries
     }
 
@@ -192,7 +193,7 @@ impl DataFile {
     /// One way to visualise what this does is to imagine that the id of tag_2 is changed to the
     /// same as tag_1, after which any duplicate ids are removed.
     pub fn merge_tags(&mut self, tag_1: u16, tag_2: u16) -> &mut Self {
-        for data_entry in &mut self.entries {
+        for data_entry in self.entries.values_mut() {
             data_entry.merge_tags(tag_1, tag_2);
         }
         self
@@ -210,7 +211,7 @@ impl DataFile {
         let new_file = File::create(&tmp_path)?;
         let mut writer = BufWriter::new(new_file);
 
-        for data_entry in &self.entries {
+        for data_entry in self.entries.values() {
             data_entry.write(&mut writer)?;
         }
         writer.flush()?;

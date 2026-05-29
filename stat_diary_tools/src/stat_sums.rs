@@ -97,7 +97,7 @@ pub fn regenerate_tag_sums(db_path: &DataBasePath) -> Result<(), io::Error> {
             _ => continue, // Remaining errors can not occur here.
         };
 
-        for data_entry in data_file.entries() {
+        for data_entry in data_file.entries().values() {
             for tag in &data_entry.tags {
                 general.add(*tag);
                 times.entry(data_entry.hour).or_default().add(*tag);
