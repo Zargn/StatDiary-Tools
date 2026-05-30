@@ -338,14 +338,18 @@ impl DataBase {
         day: i32,
         new_entry: DataEntry,
     ) -> Result<()> {
-        let filepath = self.get_data_file_path(year, month, day)?;
+        let date = DataBase::parse_date(year, month, day)?;
+        let filepath = self.get_data_file_path(date)?;
         let mut datafile = DataFile::open_data_file(&filepath)?;
-        datafile.overwrite_entry(new_entry.clone());
+        let prev_entry = datafile.overwrite_entry(new_entry.clone());
         datafile.save()?;
 
-        // TODO: Update stat sums and caches with the modified data entry.
-        // NOTE: The old entry has been removed, meaning we need to account for that when updating
-        //       the caches and stat sums.
+        if let Some(prev_entry) = prev_entry {
+            stat_sums::remove_tags(&self.path, date, prev_entry.hour, &prev_entry.tags)?;
+        }
+        stat_sums::add_tags(&self.path, date, new_entry.hour, &new_entry.tags)?;
+
+        // TODO: Update caches as well.
         Ok(())
     }
 
@@ -366,12 +370,15 @@ impl DataBase {
         day: i32,
         new_entry: DataEntry,
     ) -> Result<()> {
-        let filepath = self.get_data_file_path(year, month, day)?;
+        let date = DataBase::parse_date(year, month, day)?;
+        let filepath = self.get_data_file_path(date)?;
         let mut datafile = DataFile::open_data_file(&filepath)?;
         datafile.add_entry(new_entry.clone())?;
         datafile.save()?;
 
-        // TODO: Update stat sums and caches with the added data entry.
+        stat_sums::add_tags(&self.path, date, new_entry.hour, &new_entry.tags)?;
+
+        // TODO: Update caches with the added data entry.
         Ok(())
     }
 
@@ -427,12 +434,14 @@ impl DataBase {
 
 // Private functions
 impl DataBase {
-    pub fn get_data_file_path(&self, year: i32, month: i32, day: i32) -> Result<PathBuf> {
+    pub fn parse_date(year: i32, month: i32, day: i32) -> Result<Date> {
         let month = time::Month::try_from(month as u8)
             .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
-        let date = Date::from_calendar_date(year, month, day as u8)
-            .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
+        Date::from_calendar_date(year, month, day as u8)
+            .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))
+    }
 
+    pub fn get_data_file_path(&self, date: Date) -> Result<PathBuf> {
         let filename = format!(
             "{}-{}.{}",
             date.day(),
@@ -556,6 +565,8 @@ pub enum ErrorKind {
     CorruptedDataFile,
     /// The provided data for a `DataEntry` was invalid!
     InvalidData,
+    /// A stat sums file was corrupted!
+    CorruptedStatSumsFile,
 }
 
 impl ErrorKind {
@@ -599,6 +610,7 @@ impl ErrorKind {
             ErrorKind::EntryAlreadyExists => 16,
             ErrorKind::CorruptedDataFile => 17,
             ErrorKind::InvalidData => 18,
+            ErrorKind::CorruptedStatSumsFile => 19,
         }
     }
 }
@@ -653,6 +665,7 @@ impl From<StatSumsError> for Error {
             kind: match value {
                 StatSumsError::Io(e) => ErrorKind::Io(e),
                 StatSumsError::WalkDir(e) => ErrorKind::WalkDir(e),
+                StatSumsError::CorruptedStatSumFile => ErrorKind::CorruptedStatSumsFile,
             },
         }
     }

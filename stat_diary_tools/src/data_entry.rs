@@ -127,8 +127,8 @@ impl DataFile {
     }
 
     /// Inserts the new entry at its hour index, overwriting any existing entry already there.
-    pub fn overwrite_entry(&mut self, new_entry: DataEntry) {
-        self.entries.insert(new_entry.hour, new_entry);
+    pub fn overwrite_entry(&mut self, new_entry: DataEntry) -> Option<DataEntry> {
+        self.entries.insert(new_entry.hour, new_entry)
     }
 
     /// Adds the new entry to the datafile.
