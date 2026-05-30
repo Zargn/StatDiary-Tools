@@ -261,7 +261,7 @@ impl DataEntry {
         }
     }
 
-    pub fn from_c_data(data: &[i32]) -> Result<DataEntry, Error> {
+    pub fn from_c_data(data: &[u16]) -> Result<DataEntry, Error> {
         if data.len() < 3 {
             log::error!("DataEntry::from_c_data(): Data array was too short! Len was {} when 3 is mandatory!", data.len())
         }
@@ -282,20 +282,13 @@ impl DataEntry {
         let mut tags = Vec::new();
 
         for tag in data.iter().skip(3) {
-            let Ok(tag_id) = u16::try_from(*tag) else {
-                log::error!(
-                    "DataEntry::from_c_data(): Provided tag id: [{}] does not fit in a u16 tag id!",
-                    tag
-                );
-                return Err(Error::InvalidData);
-            };
-            tags.push(tag_id);
+            tags.push(*tag);
         }
 
         Ok(DataEntry::new(hour, m_score, p_score, tags))
     }
 
-    fn validate_score(score: i32) -> Result<u8, Error> {
+    fn validate_score(score: u16) -> Result<u8, Error> {
         if !(0..=100).contains(&score) {
             log::error!(
                 "DataEntry::from_c_data(): Score [{}] is out of range!",

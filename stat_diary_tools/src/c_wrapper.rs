@@ -397,8 +397,8 @@ pub unsafe extern "C" fn InsertDataEntry(
     year: i32,
     month: i32,
     day: i32,
-    data: *const i32,
-    data_length: i32,
+    data: *const u16,
+    data_length: u32,
 ) -> i32 {
     if data.is_null() {
         return -3;
@@ -456,8 +456,8 @@ pub unsafe extern "C" fn AddDataEntry(
     year: i32,
     month: i32,
     day: i32,
-    data: *const i32,
-    data_length: i32,
+    data: *const u16,
+    data_length: u32,
 ) -> i32 {
     if data.is_null() {
         return -3;
