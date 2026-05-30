@@ -207,6 +207,18 @@ impl DataFile {
 
     //
 
+    /// Removes `tag_id` from all data entries in this file.
+    pub fn remove_tag(&mut self, tag_id: u16) -> &mut Self {
+        for data_entry in self.entries.values_mut() {
+            data_entry.remove_tag(tag_id);
+        }
+        self
+    }
+
+    //
+
+    //
+
     /// Saves this data file to the location it was read from. The old file is overwritten.
     pub fn save(&mut self) -> Result<(), io::Error> {
         let mut tmp_path = self.file_path.clone();
@@ -315,6 +327,22 @@ impl DataEntry {
         }
         if tag_found {
             self.tags.push(tag_2);
+        }
+    }
+
+    //
+
+    //
+
+    /// Removes any occurance of `tag_id` from this entry.
+    fn remove_tag(&mut self, tag_id: u16) {
+        let mut i = 0;
+        while i < self.tags.len() {
+            if self.tags[i] == tag_id {
+                self.tags.remove(i);
+            } else {
+                i += 1;
+            }
         }
     }
 

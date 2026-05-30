@@ -531,6 +531,44 @@ pub unsafe extern "C" fn AddTag(db_path_ptr: *const c_char, tag_name_ptr: *const
 
 //
 
+/// fn RemoveTag(`db_path_ptr`, `tag_id`);
+///
+/// Attempts to remove the tag with the provided `tag_id` from the database at the path specified
+/// by `db_path_ptr`.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn RemoveTag(db_path_ptr: *const c_char, tag_id: u16) -> i32 {
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+
+    if let Err(error) = data_base.remove_tag(tag_id) {
+        log::error!("RemoveTag error occured: {error:?}");
+        return error.code();
+    }
+
+    0
+}
+
+//
+
+//
+
 /// Attempts to create a rust `String` using the provided `ptr`.
 ///
 /// # Safety

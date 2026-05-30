@@ -382,6 +382,43 @@ impl DataBase {
 
         Ok(())
     }
+
+    /// Removes the tag with the provided `tag_id` from the database.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    /// * The provided `tag_id` doesn't exist in the database.
+    pub fn remove_tag(&self, tag_id: u16) -> Result<()> {
+        log::info!("Attempting to remove tag with id: [{}]", tag_id);
+        TagList::from_file(&self.path)?.remove_tag(tag_id)?.save()?;
+        for mut datafile in self.data_files()? {
+            datafile.remove_tag(tag_id).save()?;
+        }
+        log::info!("Successfully removed tag [{}].", tag_id);
+
+        log::info!("remove_tag(): Attempting to regenerate caches...");
+        if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
+            error!(
+                "remove_tag() received {:?} when attempting to regenerate tag sums!",
+                e
+            );
+        }
+        log::info!("remove_tag(): Finished regenerating caches!");
+
+        log::info!("remove_tag(): Attempting to regenerate tag sums...");
+        if let Err(e) = cache_handling::regenerate_caches(&self.path) {
+            error!(
+                "remove_tag() received {:?} when attempting to regenerate caches!",
+                e
+            );
+        }
+        log::info!("remove_tags(): Finished regenerating tag sums!");
+
+        Ok(())
+    }
 }
 
 //
