@@ -249,8 +249,7 @@ impl DataBase {
             "Attempting to compress the database into a image at path: {:?}",
             target_path
         );
-        let db_status = DBStatus::lock(&self.path, ActiveTask::None)?;
-        db_status.unlock();
+        DBStatus::lock(&self.path, ActiveTask::None)?.unlock();
 
         if let Err(error) = backup::compress_database_to_image(&self.path, target_path) {
             return Err(error.into());
@@ -382,10 +381,24 @@ impl DataBase {
         Ok(())
     }
 
+    /// Adds the provided `tag_name` to the database.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error in the following situations, but is not limited to just
+    /// these cases:
+    ///
+    /// * The proivded tag name already exists.
     pub fn add_tag(&self, tag_name: String) -> Result<()> {
         //DBStatus::lock(&self.path, ActiveTask::None)?.unlock();
 
-        TagList::from_file(&self.path)?.add_tag(tag_name)?.save()?;
+        log::info!("Attempting to add tag: [{tag_name}]");
+
+        TagList::from_file(&self.path)?
+            .add_tag(tag_name.clone())?
+            .save()?;
+
+        log::info!("Successfully added tag: [{tag_name}]");
 
         Ok(())
     }
@@ -404,21 +417,21 @@ impl DataBase {
         for mut datafile in self.data_files()? {
             datafile.remove_tag(tag_id).save()?;
         }
-        log::info!("Successfully removed tag [{}].", tag_id);
+        log::info!("Successfully removed tag [{}]", tag_id);
 
         log::info!("remove_tag(): Attempting to regenerate caches...");
-        if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
+        if let Err(e) = cache_handling::regenerate_caches(&self.path) {
             error!(
-                "remove_tag() received {:?} when attempting to regenerate tag sums!",
+                "remove_tag() received {:?} when attempting to regenerate caches!",
                 e
             );
         }
         log::info!("remove_tag(): Finished regenerating caches!");
 
         log::info!("remove_tag(): Attempting to regenerate tag sums...");
-        if let Err(e) = cache_handling::regenerate_caches(&self.path) {
+        if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
             error!(
-                "remove_tag() received {:?} when attempting to regenerate caches!",
+                "remove_tag() received {:?} when attempting to regenerate tag sums!",
                 e
             );
         }
