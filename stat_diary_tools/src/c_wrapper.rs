@@ -35,12 +35,16 @@ pub unsafe extern "C" fn InitLogger(logfile_path_ptr: *const c_char) -> i32 {
         Err(ec) => return ec,
     };
 
-    if let Err(error) = DataBase::init_logger(PathBuf::from(logfile_path)) {
-        log::error!("CompressDBToImage error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match DataBase::init_logger(PathBuf::from(logfile_path)) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("InitLogger error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -80,12 +84,16 @@ pub unsafe extern "C" fn CompressDBToImage(
         Err(ec) => return ec,
     };
 
-    if let Err(error) = data_base.compress_to_image(Path::new(&result_path)) {
-        log::error!("CompressDBToImage error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.compress_to_image(Path::new(&result_path)) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("CompressDBToImage error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -125,14 +133,19 @@ pub unsafe extern "C" fn ExtractDBFromImage(
         Err(ec) => return ec,
     };
 
-    if let Err(error) =
-        DataBase::load_from_image(Path::new(&db_image_path), Path::new(&db_path).to_path_buf())
-    {
-        log::error!("ExtractDBFromImage error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match DataBase::load_from_image(
+        Path::new(&db_image_path),
+        Path::new(&db_path).to_path_buf(),
+    ) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("ExtractDBFromImage error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -164,12 +177,16 @@ pub unsafe extern "C" fn RegenerateCaches(db_path_ptr: *const c_char) -> i32 {
         Err(ec) => return ec,
     };
 
-    if let Err(error) = data_base.regen_caches() {
-        log::error!("RegenerateCaches error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.regen_caches() {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("RegenerateCaches error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -201,12 +218,16 @@ pub unsafe extern "C" fn ResumeTask(db_path_ptr: *const c_char) -> i32 {
         Err(ec) => return ec,
     };
 
-    if let Err(error) = data_base.resume_task() {
-        log::error!("ResumeTask error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.resume_task() {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("ResumeTask error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -238,12 +259,17 @@ pub unsafe extern "C" fn MergeTags(db_path_ptr: *const c_char, tag1: u16, tag2: 
         Err(ec) => return ec,
     };
 
-    if let Err(error) = data_base.merge_tags(tag1, tag2) {
-        log::error!("MergeTags error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.merge_tags(tag1, tag2) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("MergeTags error occured: {error:?}");
 
-    0
+            error.code()
+        }
+    };
+
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -275,12 +301,17 @@ pub unsafe extern "C" fn RegenerateTagSums(db_path_ptr: *const c_char) -> i32 {
         Err(ec) => return ec,
     };
 
-    if let Err(error) = data_base.regen_tag_sums() {
-        log::error!("RegenerateTagSums error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.regen_tag_sums() {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("RegenerateTagSums error occured: {error:?}");
 
-    0
+            error.code()
+        }
+    };
+
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -322,12 +353,16 @@ pub unsafe extern "C" fn RenameTag(
         return -3;
     };
 
-    if let Err(error) = data_base.rename_tag(old_tag.to_string(), new_tag.to_string()) {
-        log::error!("RenameTag error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.rename_tag(old_tag.to_string(), new_tag.to_string()) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("RenameTag error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -359,12 +394,17 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path_ptr: *const c_char) -> 
         Err(ec) => return ec,
     };
 
-    if let Err(error) = DataBase::upgrade_database(Path::new(&data_base_path)) {
-        println!("Error occured!\n{:?}", error);
-        return error.code();
-    }
+    let result_code = match DataBase::upgrade_database(Path::new(&data_base_path)) {
+        Ok(_) => 0,
+        Err(error) => {
+            println!("Error occured!\n{:?}", error);
 
-    0
+            error.code()
+        }
+    };
+
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -419,12 +459,16 @@ pub unsafe extern "C" fn InsertDataEntry(
         }
     };
 
-    if let Err(error) = data_base.insert_data_entry(year, month, day, data_entry) {
-        log::error!("InsertDataEntry error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.insert_data_entry(year, month, day, data_entry) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("InsertDataEntry error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -474,16 +518,21 @@ pub unsafe extern "C" fn AddDataEntry(
         Ok(data_entry) => data_entry,
         Err(error) => {
             log::error!("AddDataEntry error occured! {error:?}");
+            log::logger().flush();
             return data_base::Error::from(error).code();
         }
     };
 
-    if let Err(error) = data_base.add_data_entry(year, month, day, data_entry) {
-        log::error!("AddDataEntry error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.add_data_entry(year, month, day, data_entry) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("AddDataEntry error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -519,12 +568,17 @@ pub unsafe extern "C" fn AddTag(db_path_ptr: *const c_char, tag_name_ptr: *const
         return -2;
     };
 
-    if let Err(error) = data_base.add_tag(tag_name) {
-        log::error!("AddTag error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.add_tag(tag_name) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("AddTag error occured: {error:?}");
 
-    0
+            error.code()
+        }
+    };
+
+    log::logger().flush();
+    result_code
 }
 
 //
@@ -557,12 +611,16 @@ pub unsafe extern "C" fn RemoveTag(db_path_ptr: *const c_char, tag_id: u16) -> i
         Err(ec) => return ec,
     };
 
-    if let Err(error) = data_base.remove_tag(tag_id) {
-        log::error!("RemoveTag error occured: {error:?}");
-        return error.code();
-    }
+    let result_code = match data_base.remove_tag(tag_id) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("RemoveTag error occured: {error:?}");
+            error.code()
+        }
+    };
 
-    0
+    log::logger().flush();
+    result_code
 }
 
 //

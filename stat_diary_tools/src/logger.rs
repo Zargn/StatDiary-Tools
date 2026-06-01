@@ -1,14 +1,14 @@
 use std::{
     fs::{File, OpenOptions},
     io::{self, BufWriter, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
+    sync::Mutex,
 };
 
 use log::Level;
-use zip::DateTime;
 
 pub struct DBLogger {
-    writer: BufWriter<File>,
+    writer: Mutex<BufWriter<File>>,
 }
 
 impl log::Log for DBLogger {
@@ -18,18 +18,42 @@ impl log::Log for DBLogger {
 
     fn log(&self, record: &log::Record) {
         if self.enabled(record.metadata()) {
-            /*self.logfile.write(format!(
+            let mut writer = self
+                .writer
+                .lock()
+                .expect("This mutex should never possibly get poisoned.");
+
+            if let Err(error) = writeln!(
+                writer,
                 "{:?}: {} - {}",
                 std::time::Instant::now(),
                 record.level(),
                 record.args()
-            ))?; */
+            ) {
+                println!("Logifle error: {}", error);
+            }
 
-            println!("[time]: {} - {}", record.level(), record.args());
+            /*
+            self.writer.write(format!(
+                "{:?}: {} - {}",
+                std::time::Instant::now(),
+                record.level(),
+                record.args()
+            ))?; // */
+            //println!("[time]: {} - {}", record.level(), record.args());
         }
     }
 
-    fn flush(&self) {}
+    fn flush(&self) {
+        let mut writer = self
+            .writer
+            .lock()
+            .expect("This mutex should never possibly get poisoned.");
+
+        if let Err(e) = writer.flush() {
+            println!("Logfile flush error: {e}");
+        }
+    }
 }
 
 impl DBLogger {
@@ -38,6 +62,8 @@ impl DBLogger {
         println!("logfile::new(): {:?}", logfile);
         let writer = BufWriter::new(logfile?);
 
-        Ok(DBLogger { writer })
+        Ok(DBLogger {
+            writer: Mutex::new(writer),
+        })
     }
 }
