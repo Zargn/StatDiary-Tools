@@ -58,7 +58,10 @@ impl log::Log for DBLogger {
 
 impl DBLogger {
     pub fn new(logfile_path: PathBuf) -> Result<DBLogger, io::Error> {
-        let logfile = OpenOptions::new().append(true).open(logfile_path);
+        let logfile = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(logfile_path);
         println!("logfile::new(): {:?}", logfile);
         let writer = BufWriter::new(logfile?);
 
