@@ -616,6 +616,13 @@ impl ErrorKind {
     /// * `12` => `InvalidImage`,
     /// * `13` => `UnableToZip`,
     /// * `14` => `Image`,
+    /// * `15` => `InvalidDate`
+    /// * `16` => `EntryAlreadyExists`
+    /// * `17` => `CorruptedDataFile`
+    /// * `18` => `InvalidData`
+    /// * `19` => `CorruptedStatSumsFile`
+    /// * `20` => `MissingSettingsFile`
+    /// * `21` => `CorruptedSettingsFile`
     pub fn code(&self) -> i32 {
         match self {
             ErrorKind::Io(_) => 1,
