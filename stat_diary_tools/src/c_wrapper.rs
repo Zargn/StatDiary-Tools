@@ -388,20 +388,24 @@ pub unsafe extern "C" fn RenameTag(
 ///
 /// * The nul terminator must be within `isize::MAX` from `ptr`
 #[no_mangle]
-pub unsafe extern "C" fn TemporaryUpdateDatabase(db_path_ptr: *const c_char) -> i32 {
+pub unsafe extern "C" fn TemporaryUpdateDatabase(
+    db_path_ptr: *const c_char,
+    current_day_switch_offset: i32,
+) -> i32 {
     let data_base_path = match try_ptr_to_string(db_path_ptr) {
         Ok(db_path) => db_path,
         Err(ec) => return ec,
     };
 
-    let result_code = match DataBase::upgrade_database(Path::new(&data_base_path)) {
-        Ok(_) => 0,
-        Err(error) => {
-            println!("Error occured!\n{:?}", error);
+    let result_code =
+        match DataBase::upgrade_database(Path::new(&data_base_path), current_day_switch_offset) {
+            Ok(_) => 0,
+            Err(error) => {
+                println!("Error occured!\n{:?}", error);
 
-            error.code()
-        }
-    };
+                error.code()
+            }
+        };
 
     log::logger().flush();
     result_code
@@ -676,8 +680,12 @@ unsafe fn try_ptr_to_string(ptr: *const c_char) -> Result<String, i32> {
 /// * The nul terminator must be within `isize::MAX` from `ptr`
 unsafe fn try_get_db(db_path_ptr: *const c_char) -> Result<DataBase, i32> {
     let db_path_str = try_ptr_to_string(db_path_ptr)?;
-    match DataBase::load(PathBuf::from(db_path_str)) {
+    match DataBase::load(PathBuf::from(&db_path_str)) {
         Ok(db_path) => Ok(db_path),
-        Err(err) => Err(err.code()),
+        Err(err) => {
+            log::error!("Could not load database at {:?}", db_path_str);
+            log::logger().flush();
+            Err(err.code())
+        }
     }
 }

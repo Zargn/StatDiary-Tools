@@ -8,7 +8,9 @@ pub mod data_base;
 mod data_entry;
 mod db_path;
 mod db_status;
+mod diary_file;
 mod logger;
+mod settings_file;
 mod stat_sums;
 mod tags;
 mod update_database;
@@ -29,6 +31,27 @@ pub fn init_logger() -> Result<(), SetLoggerError> {
 //
 // Add Diary Entry function
 // Insert Diary Entry function
+//
+// Adjust day_switch_offset function
+// (
+//      This will require moving data entries between datafiles.
+//      For the current data entries the "day" changes at 04:00, meaning a entry at 1:00 am will
+//      not be placed in the next day, but rather be left at the current day.
+//      Meaning that if we want to change the offset back to 0, so a new day file begins at 00:00
+//      then we will have to move any entry at 00:00 up to 04:00 to the next day file.
+//
+//      The best way to do this is likely to include a db_settings file which holds the current
+//      offset.
+//
+//      When we change the offset we should make the changes on a copy of the database instead of
+//      the original. Since if however unlikely the program stops mid-change there will be no way
+//      to tell which entries has been moved or not. We could probably find a way to "save" what
+//      has beem changed, but I think in this case a full copy and swap once complete is the better
+//      choice.
+// )
+// Update Data Entry functions to use the day_switch_offset when selecting data files.
+// Update TemporaryUpdateDataBase to take in a int representing the current offset.
+// Update DataBase to include a day_switch_offset field read from db_settings.txt
 //
 // Analytical functions? Potential examples:
 // - Rank tags by scores.

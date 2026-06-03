@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io,
+    io::{self, BufWriter, Write},
     path::{Path, PathBuf},
 };
 
@@ -16,6 +16,7 @@ use crate::{
     db_path::{DataBasePath, DataBasePathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
     logger::DBLogger,
+    settings_file::{self, Settings},
     stat_sums::{self, StatSumsError},
     tags::{TagList, TagsError},
     update_database, DATAFILEEXTENSION,
@@ -23,6 +24,7 @@ use crate::{
 
 pub struct DataBase {
     path: DataBasePath,
+    settings: Settings,
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -48,9 +50,9 @@ impl DataBase {
     /// * `db_path` does not lead to a existing directory.
     /// * `db_path` leads to a directory, but the directory is missing a `.db_marker` file
     pub fn load(db_path: PathBuf) -> Result<DataBase> {
-        Ok(DataBase {
-            path: DataBasePath::new(db_path)?,
-        })
+        let path = DataBasePath::new(db_path)?;
+        let settings = Settings::load(&path)?;
+        Ok(DataBase { path, settings })
     }
 
     /// Attempts to extract a database from `img_path` into `db_path`.
@@ -77,9 +79,7 @@ impl DataBase {
             img_path, db_path
         );
 
-        Ok(DataBase {
-            path: DataBasePath::new(db_path)?,
-        })
+        DataBase::load(db_path)
     }
 
     /// Attempts to resume any unfinished task.
@@ -263,10 +263,19 @@ impl DataBase {
         Ok(())
     }
 
-    pub fn upgrade_database(db_path: &Path) -> Result<i32> {
+    pub fn upgrade_database(db_path: &Path, current_day_switch_offset: i32) -> Result<i32> {
         // Mark the db with a .db_marker to ensure it can be recognised as a db by the load()
         // method.
         File::create(db_path.join(".db_marker"))?;
+
+        let mut writer = BufWriter::new(File::create(db_path.join("db_settings.txt"))?);
+        writeln!(
+            writer,
+            "day_switch_offset = [{}]",
+            current_day_switch_offset
+        );
+        writer.flush()?;
+
         let database = DataBase::load(db_path.to_path_buf())?;
 
         if let Err(e) = update_database::temporary_update_database(&database.path) {
@@ -580,6 +589,10 @@ pub enum ErrorKind {
     InvalidData,
     /// A stat sums file was corrupted!
     CorruptedStatSumsFile,
+    /// The settings file does not exist!
+    MissingSettingsFile,
+    /// The settings file is corrupted!
+    CorruptedSettingsFile,
 }
 
 impl ErrorKind {
@@ -624,6 +637,8 @@ impl ErrorKind {
             ErrorKind::CorruptedDataFile => 17,
             ErrorKind::InvalidData => 18,
             ErrorKind::CorruptedStatSumsFile => 19,
+            ErrorKind::MissingSettingsFile => 20,
+            ErrorKind::CorruptedSettingsFile => 21,
         }
     }
 }
@@ -720,6 +735,18 @@ impl From<data_entry::Error> for Error {
                 data_entry::Error::InvalidDate => ErrorKind::InvalidDate,
                 data_entry::Error::CorruptedDataFile => ErrorKind::CorruptedDataFile,
                 data_entry::Error::InvalidData => ErrorKind::InvalidData,
+            },
+        }
+    }
+}
+
+impl From<settings_file::Error> for Error {
+    fn from(value: settings_file::Error) -> Self {
+        Self {
+            kind: match value {
+                settings_file::Error::Io(e) => ErrorKind::Io(e),
+                settings_file::Error::DoesNotExist => ErrorKind::MissingSettingsFile,
+                settings_file::Error::IsCorrupted => ErrorKind::CorruptedSettingsFile,
             },
         }
     }
