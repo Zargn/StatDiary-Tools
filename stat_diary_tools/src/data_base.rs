@@ -448,14 +448,7 @@ impl DataBase {
 
         Ok(())
     }
-}
 
-//
-
-//
-
-// Private functions
-impl DataBase {
     pub fn parse_date(year: i32, month: i32, day: i32) -> Result<Date> {
         let month = time::Month::try_from(month as u8)
             .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
@@ -481,6 +474,21 @@ impl DataBase {
         Ok(data_file_path)
     }
 
+    pub fn settings(&self) -> &Settings {
+        &self.settings
+    }
+
+    pub fn database_path(&self) -> &Path {
+        self.path.root()
+    }
+}
+
+//
+
+//
+
+// Private functions
+impl DataBase {
     fn intr_rename_tag(&self, old_tag: String, new_tag: String) -> Result<()> {
         TagList::from_file(&self.path)?
             .rename_tag(old_tag, new_tag)?
@@ -538,7 +546,7 @@ pub struct Error {
 }
 
 impl Error {
-    fn with_kind(kind: ErrorKind) -> Error {
+    pub fn with_kind(kind: ErrorKind) -> Error {
         Self { kind }
     }
 
@@ -593,6 +601,8 @@ pub enum ErrorKind {
     MissingSettingsFile,
     /// The settings file is corrupted!
     CorruptedSettingsFile,
+    /// The provided day_switch_offset is outside of the acceptable -12 to 12 range.
+    OffsetOutOfRange,
 }
 
 impl ErrorKind {
@@ -623,6 +633,7 @@ impl ErrorKind {
     /// * `19` => `CorruptedStatSumsFile`
     /// * `20` => `MissingSettingsFile`
     /// * `21` => `CorruptedSettingsFile`
+    /// * `22` => `OffsetOutOfRange`
     pub fn code(&self) -> i32 {
         match self {
             ErrorKind::Io(_) => 1,
@@ -646,6 +657,7 @@ impl ErrorKind {
             ErrorKind::CorruptedStatSumsFile => 19,
             ErrorKind::MissingSettingsFile => 20,
             ErrorKind::CorruptedSettingsFile => 21,
+            ErrorKind::OffsetOutOfRange => 22,
         }
     }
 }

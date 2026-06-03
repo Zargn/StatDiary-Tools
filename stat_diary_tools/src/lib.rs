@@ -6,6 +6,7 @@ pub mod c_wrapper;
 mod cache_handling;
 pub mod data_base;
 mod data_entry;
+mod day_switch_offset;
 mod db_path;
 mod db_status;
 mod diary_file;

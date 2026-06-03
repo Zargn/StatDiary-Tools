@@ -18,7 +18,7 @@ impl From<io::Error> for Error {
 }
 
 pub struct Settings {
-    day_switch_offset: i32,
+    pub day_switch_offset: i8,
 }
 
 type Result<T> = std::result::Result<T, Error>;
@@ -43,8 +43,13 @@ impl Settings {
 
 // Private functions
 impl Settings {
-    fn get_day_switch_offset(line: &str) -> Result<i32> {
+    fn get_day_switch_offset(line: &str) -> Result<i8> {
         let value = line.split('=').nth(1).ok_or(Error::IsCorrupted)?;
-        value.parse::<i32>().map_err(|_| Error::IsCorrupted)
+        let i = value.parse::<i32>().map_err(|_| Error::IsCorrupted)?;
+        if (-12..=12).contains(&i) {
+            Ok(i as i8)
+        } else {
+            Err(Error::IsCorrupted)
+        }
     }
 }
