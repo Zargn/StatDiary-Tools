@@ -123,6 +123,12 @@ impl DataBase {
                     return Err(e);
                 }
             }
+            ActiveTask::RemoveTag(tag_id) => {
+                if let Err(e) = self.intr_remove_tag(tag_id) {
+                    error!("remove_tag() failed due to: {e:?}");
+                    return Err(e);
+                }
+            }
         }
 
         db_status.unlock();
@@ -273,7 +279,7 @@ impl DataBase {
             writer,
             "day_switch_offset = [{}]",
             current_day_switch_offset
-        );
+        )?;
         writer.flush()?;
 
         let database = DataBase::load(db_path.to_path_buf())?;
@@ -421,30 +427,11 @@ impl DataBase {
     ///
     /// * The provided `tag_id` doesn't exist in the database.
     pub fn remove_tag(&self, tag_id: u16) -> Result<()> {
-        log::info!("Attempting to remove tag with id: [{}]", tag_id);
-        TagList::from_file(&self.path)?.remove_tag(tag_id)?.save()?;
-        for mut datafile in self.data_files()? {
-            datafile.remove_tag(tag_id).save()?;
-        }
-        log::info!("Successfully removed tag [{}]", tag_id);
+        let db_status = DBStatus::lock(&self.path, ActiveTask::RemoveTag(tag_id))?;
 
-        log::info!("remove_tag(): Attempting to regenerate caches...");
-        if let Err(e) = cache_handling::regenerate_caches(&self.path) {
-            error!(
-                "remove_tag() received {:?} when attempting to regenerate caches!",
-                e
-            );
-        }
-        log::info!("remove_tag(): Finished regenerating caches!");
+        self.intr_remove_tag(tag_id)?;
 
-        log::info!("remove_tag(): Attempting to regenerate tag sums...");
-        if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
-            error!(
-                "remove_tag() received {:?} when attempting to regenerate tag sums!",
-                e
-            );
-        }
-        log::info!("remove_tags(): Finished regenerating tag sums!");
+        db_status.unlock();
 
         Ok(())
     }
@@ -531,6 +518,36 @@ impl DataBase {
 
         Ok(())
     }
+
+    fn intr_remove_tag(&self, tag_id: u16) -> Result<()> {
+        log::info!("Attempting to remove tag with id: [{}]", tag_id);
+        let mut tag_list = TagList::from_file(&self.path)?;
+        tag_list.remove_tag(tag_id)?;
+        for mut datafile in self.data_files()? {
+            datafile.remove_tag(tag_id).save()?;
+        }
+        log::info!("Successfully removed tag [{}]", tag_id);
+
+        log::info!("remove_tag(): Attempting to regenerate caches...");
+        if let Err(e) = cache_handling::regenerate_caches(&self.path) {
+            error!(
+                "remove_tag() received {:?} when attempting to regenerate caches!",
+                e
+            );
+        }
+        log::info!("remove_tag(): Finished regenerating caches!");
+
+        log::info!("remove_tag(): Attempting to regenerate tag sums...");
+        if let Err(e) = stat_sums::regenerate_tag_sums(&self.path) {
+            error!(
+                "remove_tag() received {:?} when attempting to regenerate tag sums!",
+                e
+            );
+        }
+        log::info!("remove_tags(): Finished regenerating tag sums!");
+        tag_list.save()?;
+        Ok(())
+    }
 }
 
 //
@@ -569,7 +586,7 @@ pub enum ErrorKind {
     /// This should only happen if the program is terminated mid-operation.
     DataBaseBusy,
     /// The database is marked as busy, but the data required by the active task is missing.
-    MissingData,
+    CorruptedDBStatus,
     /// The database is marked as busy, but the task id does not match any known task.
     UnknownTask,
     /// The tags file is corrupted. The file might contain duplicate ids or tag names, or a line
@@ -617,7 +634,7 @@ impl ErrorKind {
     /// * `3` => `PathDoesNotExist`,
     /// * `4` => `IsNotDataBase`,
     /// * `5` => `DataBaseBusy`,
-    /// * `6` => `MissingData`,
+    /// * `6` => `CorruptedDBStatus`,
     /// * `7` => `UnknownTask`,
     /// * `8` => `CorruptedTagsFile`,
     /// * `9` => `UnknownTag`,
@@ -641,7 +658,7 @@ impl ErrorKind {
             ErrorKind::PathDoesNotExist => 3,
             ErrorKind::IsNotDataBase => 4,
             ErrorKind::DataBaseBusy => 5,
-            ErrorKind::MissingData => 6,
+            ErrorKind::CorruptedDBStatus => 6,
             ErrorKind::UnknownTask => 7,
             ErrorKind::CorruptedTagsFile => 8,
             ErrorKind::UnknownTag(_) => 9,
@@ -698,7 +715,7 @@ impl From<DBStatusError> for Error {
         Self {
             kind: match value {
                 DBStatusError::Io(e) => ErrorKind::Io(e),
-                DBStatusError::MissingData => ErrorKind::MissingData,
+                DBStatusError::CorruptedData => ErrorKind::CorruptedDBStatus,
                 DBStatusError::UnknownTask => ErrorKind::UnknownTask,
                 DBStatusError::DataBaseBusy(_, _) => ErrorKind::DataBaseBusy,
             },

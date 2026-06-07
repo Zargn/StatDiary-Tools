@@ -4,8 +4,6 @@ use std::{
     path::PathBuf,
 };
 
-use log::warn;
-
 use crate::db_path::DataBasePath;
 
 //
@@ -19,6 +17,7 @@ pub enum ActiveTask {
     RegenerateTagSums,
     MergeTags(u16, u16),
     RenameTag(String, String),
+    RemoveTag(u16),
 }
 
 impl ActiveTask {
@@ -30,17 +29,49 @@ impl ActiveTask {
             "2" => Ok(ActiveTask::RegenerateTagSums),
             "3" => {
                 let (tag_1, tag_2) = {
-                    warn!("db_status::ActiveTask::parse() has unacceptable error handling. Correction required!");
-                    let mut data = parts.next().ok_or(DBStatusError::MissingData)?.split(' ');
-                    (
-                        // TODO: Fix error handling to NOT crash the program if the file has a
-                        // unexpected format.
-                        data.next().unwrap().parse().unwrap(),
-                        data.next().unwrap().parse().unwrap(),
-                    )
+                    let data: Vec<u16> = parts
+                        .next()
+                        .ok_or(DBStatusError::CorruptedData)?
+                        .split(|c: char| !c.is_ascii_digit())
+                        .filter(|s| s.is_empty())
+                        // The parse() below will never fail due to the way the string is created.
+                        .map(|s| s.parse::<u16>().map_err(|_| DBStatusError::CorruptedData))
+                        .collect::<Result<_>>()?;
+
+                    if data.len() != 2 {
+                        log::error!("db_status::ActiveTask::parse(): Failed to parse MergeTag. Found {} arguments but expected 2!", data.len());
+                        return Err(DBStatusError::CorruptedData);
+                    }
+                    (data[0], data[1])
                 };
 
                 Ok(ActiveTask::MergeTags(tag_1, tag_2))
+            }
+            "4" => {
+                let (old_tag, new_tag) = {
+                    let data: Vec<&str> = parts
+                        .next()
+                        .ok_or(DBStatusError::CorruptedData)?
+                        .split(' ')
+                        .collect();
+                    if data.len() != 2 {
+                        log::error!("db_status::ActiveTask::parse(): Failed to parse RenameTag. Found {} arguments but expected 2!", data.len());
+                        return Err(DBStatusError::CorruptedData);
+                    }
+                    (data[0], data[1])
+                };
+                Ok(ActiveTask::RenameTag(
+                    old_tag.to_string(),
+                    new_tag.to_string(),
+                ))
+            }
+            "5" => {
+                let data = parts.next().ok_or(DBStatusError::CorruptedData)?;
+                let Ok(tag_id) = data.parse::<u16>() else {
+                    log::error!("db_status::ActiveTask::parse(): Failed to parse RemoveTag. Found unepected characters in tag id! [{}]", data);
+                    return Err(DBStatusError::CorruptedData);
+                };
+                Ok(ActiveTask::RemoveTag(tag_id))
             }
             _ => Err(DBStatusError::UnknownTask),
         }
@@ -50,7 +81,7 @@ impl ActiveTask {
 
     //
 
-    fn to_data_string(self) -> String {
+    fn into_data_string(self) -> String {
         let task_id = self.task_id();
         let task_data = match self {
             Self::None => "",
@@ -58,6 +89,7 @@ impl ActiveTask {
             Self::RegenerateTagSums => "",
             Self::MergeTags(s1, s2) => &format!("{} {}", s1, s2),
             Self::RenameTag(s1, s2) => &format!("{} {}", s1, s2),
+            Self::RemoveTag(tag_id) => &format!("{}", tag_id),
         };
         format!("{}|{}", task_id, task_data)
     }
@@ -73,6 +105,7 @@ impl ActiveTask {
             Self::RegenerateTagSums => 2,
             Self::MergeTags(_, _) => 3,
             Self::RenameTag(_, _) => 4,
+            Self::RemoveTag(_) => 5,
         }
     }
 }
@@ -85,7 +118,7 @@ impl ActiveTask {
 pub enum DBStatusError {
     Io(io::Error),
     DataBaseBusy(ActiveTask, DBStatus),
-    MissingData,
+    CorruptedData,
     UnknownTask,
 }
 
@@ -129,10 +162,10 @@ impl DBStatus {
         };
         match File::create_new(&filepath) {
             Ok(mut file) => {
-                write!(file, "{}", task.to_data_string())?;
+                write!(file, "{}", task.into_data_string())?;
                 Ok(db_status)
             }
-            Err(e) => {
+            Err(_) => {
                 let mut data_str = String::new();
                 let mut file = File::open(filepath)?;
                 file.read_to_string(&mut data_str)?;
