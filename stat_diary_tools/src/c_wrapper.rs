@@ -439,8 +439,9 @@ pub unsafe extern "C" fn TemporaryUpdateDatabase(
 pub unsafe extern "C" fn InsertDataEntry(
     db_path_ptr: *const c_char,
     year: i32,
-    month: i32,
-    day: i32,
+    month: u8,
+    day: u8,
+    hour: u8,
     data: *const u16,
     data_length: u32,
 ) -> i32 {
@@ -455,7 +456,7 @@ pub unsafe extern "C" fn InsertDataEntry(
         Err(ec) => return ec,
     };
 
-    let data_entry = match DataEntry::from_c_data(data) {
+    let data_entry = match DataEntry::from_c_data(data, hour, data_base.settings()) {
         Ok(data_entry) => data_entry,
         Err(error) => {
             log::error!("InsertDataEntry error occured! {error:?}");
@@ -502,8 +503,9 @@ pub unsafe extern "C" fn InsertDataEntry(
 pub unsafe extern "C" fn AddDataEntry(
     db_path_ptr: *const c_char,
     year: i32,
-    month: i32,
-    day: i32,
+    month: u8,
+    day: u8,
+    hour: u8,
     data: *const u16,
     data_length: u32,
 ) -> i32 {
@@ -518,7 +520,7 @@ pub unsafe extern "C" fn AddDataEntry(
         Err(ec) => return ec,
     };
 
-    let data_entry = match DataEntry::from_c_data(data) {
+    let data_entry = match DataEntry::from_c_data(data, hour, data_base.settings()) {
         Ok(data_entry) => data_entry,
         Err(error) => {
             log::error!("AddDataEntry error occured! {error:?}");

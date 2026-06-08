@@ -41,6 +41,7 @@ pub fn change_day_switch_offset(database: DataBase, new_offset: i8) -> Result<()
 
 fn create_temp_copy(database: DataBase, dir_path: &Path) -> Result<DataBase> {
     log::info!("Creating database copy...");
+    log::warn!("The copying logic works fine but is not ideal. For the future a proper copy function should be made.");
     let img_path = dir_path.join("temp_backup.png");
     database.compress_to_image(&img_path)?;
     let database_copy = DataBase::load_from_image(&img_path, dir_path.join(TEMPDBPATH))?;

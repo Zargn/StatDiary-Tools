@@ -6,7 +6,7 @@ use std::{
 
 use image::ImageError;
 use log::{error, info};
-use time::Date;
+use time::{Date, Duration, PrimitiveDateTime, Time};
 use walkdir::WalkDir;
 
 use crate::{
@@ -275,11 +275,7 @@ impl DataBase {
         File::create(db_path.join(".db_marker"))?;
 
         let mut writer = BufWriter::new(File::create(db_path.join("db_settings.txt"))?);
-        writeln!(
-            writer,
-            "day_switch_offset = [{}]",
-            current_day_switch_offset
-        )?;
+        writeln!(writer, "day_switch_offset={}", current_day_switch_offset)?;
         writer.flush()?;
 
         let database = DataBase::load(db_path.to_path_buf())?;
@@ -348,20 +344,25 @@ impl DataBase {
     pub fn insert_data_entry(
         &self,
         year: i32,
-        month: i32,
-        day: i32,
+        month: u8,
+        day: u8,
         new_entry: DataEntry,
     ) -> Result<()> {
-        let date = DataBase::parse_date(year, month, day)?;
-        let filepath = self.get_data_file_path(date)?;
+        let datetime = DataBase::parse_datetime(year, month, day, new_entry.hour)?;
+        let filepath = self.get_data_file_path(datetime)?;
         let mut datafile = DataFile::open_data_file(&filepath)?;
         let prev_entry = datafile.overwrite_entry(new_entry.clone());
         datafile.save()?;
 
         if let Some(prev_entry) = prev_entry {
-            stat_sums::remove_tags(&self.path, date, prev_entry.hour, &prev_entry.tags)?;
+            stat_sums::remove_tags(
+                &self.path,
+                datetime.date(),
+                prev_entry.hour,
+                &prev_entry.tags,
+            )?;
         }
-        stat_sums::add_tags(&self.path, date, new_entry.hour, &new_entry.tags)?;
+        stat_sums::add_tags(&self.path, datetime.date(), new_entry.hour, &new_entry.tags)?;
 
         // TODO: Update caches as well.
         Ok(())
@@ -380,17 +381,17 @@ impl DataBase {
     pub fn add_data_entry(
         &self,
         year: i32,
-        month: i32,
-        day: i32,
+        month: u8,
+        day: u8,
         new_entry: DataEntry,
     ) -> Result<()> {
-        let date = DataBase::parse_date(year, month, day)?;
-        let filepath = self.get_data_file_path(date)?;
+        let datetime = DataBase::parse_datetime(year, month, day, new_entry.hour)?;
+        let filepath = self.get_data_file_path(datetime)?;
         let mut datafile = DataFile::open_data_file(&filepath)?;
         datafile.add_entry(new_entry.clone())?;
         datafile.save()?;
 
-        stat_sums::add_tags(&self.path, date, new_entry.hour, &new_entry.tags)?;
+        stat_sums::add_tags(&self.path, datetime.date(), new_entry.hour, &new_entry.tags)?;
 
         // TODO: Update caches with the added data entry.
         Ok(())
@@ -436,14 +437,22 @@ impl DataBase {
         Ok(())
     }
 
-    pub fn parse_date(year: i32, month: i32, day: i32) -> Result<Date> {
-        let month = time::Month::try_from(month as u8)
+    pub fn parse_datetime(year: i32, month: u8, day: u8, hour: u8) -> Result<PrimitiveDateTime> {
+        let month =
+            time::Month::try_from(month).map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
+        let date = Date::from_calendar_date(year, month, day)
             .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
-        Date::from_calendar_date(year, month, day as u8)
-            .map_err(|_| Error::with_kind(ErrorKind::InvalidDate))
+
+        let time =
+            Time::from_hms(hour, 0, 0).map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
+
+        Ok(PrimitiveDateTime::new(date, time))
     }
 
-    pub fn get_data_file_path(&self, date: Date) -> Result<PathBuf> {
+    pub fn get_data_file_path(&self, mut datetime: PrimitiveDateTime) -> Result<PathBuf> {
+        datetime -= Duration::hours(self.settings().day_switch_offset as i64);
+        let date = datetime.date();
+
         let filename = format!(
             "{}-{}.{}",
             date.day(),

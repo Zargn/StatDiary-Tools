@@ -1,6 +1,3 @@
-use log::{LevelFilter, SetLoggerError};
-
-use crate::logger::DBLogger;
 mod backup;
 pub mod c_wrapper;
 mod cache_handling;
@@ -53,6 +50,15 @@ pub fn init_logger() -> Result<(), SetLoggerError> {
 // Update Data Entry functions to use the day_switch_offset when selecting data files.
 // Update TemporaryUpdateDataBase to take in a int representing the current offset.
 // Update DataBase to include a day_switch_offset field read from db_settings.txt
+//
+// Think about the way we store data entries and the hours they belong to.
+// Currently I am fairly sure we store the hour directly, meaning that with a offset of +4 hours
+// 1 am is actually the next day even though when sorted by value it would show up before all
+// entries of that day. It might be benefitial to instead add the offset to the hour provided.
+// Meaning that if we get a entry at 2 am with a offset of +4 hours we save the entry with hour
+// 2 + 24 to compensate for the offset. That way the hours are easier to sort in the correct order,
+// while at the same time enabling us to safely change the day_switch_offset since we will be able
+// to tell what entries have and haven't been moved.
 //
 // Analytical functions? Potential examples:
 // - Rank tags by scores.
@@ -118,9 +124,9 @@ pub mod utilities {
         TagList::from_file(&DataBasePath::new(db_path).unwrap()).unwrap()
     }
 
-    pub fn get_datafile(database: &DataBase, year: i32, month: i32, day: i32) -> DataFile {
-        let date = DataBase::parse_date(year, month, day).unwrap();
-        let filepath = database.get_data_file_path(date).unwrap();
+    pub fn get_datafile(database: &DataBase, year: i32, month: u8, day: u8) -> DataFile {
+        let datetime = DataBase::parse_datetime(year, month, day, 12).unwrap();
+        let filepath = database.get_data_file_path(datetime).unwrap();
         DataFile::open_data_file(&filepath).unwrap()
     }
 

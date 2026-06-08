@@ -8,7 +8,7 @@ use std::{
 
 use log::warn;
 
-use crate::{DATAFILEEXTENSION, DIARYFILEEXTENSION};
+use crate::{settings_file::Settings, DATAFILEEXTENSION, DIARYFILEEXTENSION};
 
 /*
 #[derive(Debug)]
@@ -261,11 +261,12 @@ impl DataEntry {
         }
     }
 
-    pub fn from_c_data(data: &[u16]) -> Result<DataEntry, Error> {
-        if data.len() < 3 {
+    pub fn from_c_data(data: &[u16], hour: u8, db_settings: &Settings) -> Result<DataEntry, Error> {
+        if data.len() < 2 {
             log::error!("DataEntry::from_c_data(): Data array was too short! Len was {} when 3 is mandatory!", data.len())
         }
 
+        /*
         let hour = {
             if !(0..24).contains(&data[0]) {
                 log::error!(
@@ -275,9 +276,9 @@ impl DataEntry {
                 return Err(Error::InvalidData);
             }
             data[0] as u8
-        };
-        let m_score = Self::validate_score(data[1])?;
-        let p_score = Self::validate_score(data[2])?;
+        };*/
+        let m_score = Self::validate_score(data[0])?;
+        let p_score = Self::validate_score(data[1])?;
 
         let mut tags = Vec::new();
 
