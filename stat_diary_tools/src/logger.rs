@@ -8,6 +8,8 @@ use std::{
 use log::Level;
 use time::{macros::format_description, OffsetDateTime};
 
+use crate::TIMEFORMAT;
+
 pub struct DBLogger {
     writer: Mutex<BufWriter<File>>,
 }
@@ -24,8 +26,6 @@ impl log::Log for DBLogger {
                 .lock()
                 .expect("This mutex should never possibly get poisoned.");
 
-            let format = format_description!("[year]-[month]-[day] [hour]:[minute]:[second]");
-
             // TimeZone is only displayed if the local time couldn't be determined.
             let (timezone, datetime) = match OffsetDateTime::now_local() {
                 Ok(datetime) => ("", datetime),
@@ -36,7 +36,7 @@ impl log::Log for DBLogger {
                 writer,
                 "{}{:?}: {} - {}",
                 timezone,
-                datetime.format(&format).unwrap(),
+                datetime.format(&TIMEFORMAT).unwrap(),
                 record.level(),
                 record.args()
             ) {

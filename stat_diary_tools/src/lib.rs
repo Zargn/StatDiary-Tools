@@ -1,3 +1,5 @@
+use time::{format_description::StaticFormatDescription, macros::format_description};
+
 mod backup;
 pub mod c_wrapper;
 mod cache_handling;
@@ -15,6 +17,10 @@ mod update_database;
 
 const DATAFILEEXTENSION: &str = "statdiary";
 const DIARYFILEEXTENSION: &str = "diary";
+const TIMEFORMAT: StaticFormatDescription = format_description!(
+    "[year]-[month]-[day] [offset_hour \
+         sign:mandatory]h [hour]:[minute]:[second]"
+);
 
 /*
 pub fn init_logger() -> Result<(), SetLoggerError> {
