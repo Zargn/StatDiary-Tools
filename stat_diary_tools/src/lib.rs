@@ -132,7 +132,7 @@ pub mod utilities {
 
     pub fn get_datafile(database: &DataBase, year: i32, month: u8, day: u8) -> DataFile {
         let datetime = DataBase::parse_datetime(year, month, day, 12).unwrap();
-        let filepath = database.get_data_file_path(datetime).unwrap();
+        let filepath = database.get_date_file_path(datetime).unwrap();
         DataFile::open_data_file(&filepath).unwrap()
     }
 

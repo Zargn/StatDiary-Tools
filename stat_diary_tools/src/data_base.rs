@@ -6,7 +6,7 @@ use std::{
 
 use image::ImageError;
 use log::{error, info};
-use time::{Date, Duration, PrimitiveDateTime, Time};
+use time::{Date, Duration, OffsetDateTime, PrimitiveDateTime, Time, UtcOffset};
 use walkdir::WalkDir;
 
 use crate::{
@@ -469,7 +469,7 @@ impl DataBase {
         todo!();
     }
 
-    pub fn parse_datetime(year: i32, month: u8, day: u8, hour: u8) -> Result<PrimitiveDateTime> {
+    pub fn parse_datetime(year: i32, month: u8, day: u8, hour: u8) -> Result<OffsetDateTime> {
         let month =
             time::Month::try_from(month).map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
         let date = Date::from_calendar_date(year, month, day)
@@ -478,7 +478,11 @@ impl DataBase {
         let time =
             Time::from_hms(hour, 0, 0).map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
 
-        Ok(PrimitiveDateTime::new(date, time))
+        Ok(OffsetDateTime::new_in_offset(
+            date,
+            time,
+            UtcOffset::current_local_offset().unwrap_or(UtcOffset::UTC),
+        ))
     }
 
     pub fn parse_compensated_datetime(
@@ -487,12 +491,12 @@ impl DataBase {
         month: u8,
         day: u8,
         hour: u8,
-    ) -> Result<PrimitiveDateTime> {
+    ) -> Result<OffsetDateTime> {
         let raw = DataBase::parse_datetime(year, month, day, hour)?;
         Ok(raw + Duration::hours(self.settings.day_switch_offset as i64))
     }
 
-    pub fn get_date_file_path(&self, mut datetime: PrimitiveDateTime) -> Result<PathBuf> {
+    pub fn get_date_file_path(&self, mut datetime: OffsetDateTime) -> Result<PathBuf> {
         datetime -= Duration::hours(self.settings().day_switch_offset as i64);
         let date = datetime.date();
 
