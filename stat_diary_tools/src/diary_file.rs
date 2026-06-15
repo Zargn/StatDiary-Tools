@@ -149,6 +149,10 @@ impl DiaryEntry {
             text: text.to_string(),
         })
     }
+
+    pub fn timestamp(&self) -> &OffsetDateTime {
+        &self.timestamp
+    }
 }
 
 impl Display for DiaryEntry {

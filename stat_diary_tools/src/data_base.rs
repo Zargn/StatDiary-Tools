@@ -15,6 +15,7 @@ use crate::{
     data_entry::{self, DataEntry, DataFile},
     db_path::{DataBasePath, DataBasePathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
+    diary_file::{DiaryEntry, DiaryFile},
     logger::DBLogger,
     settings_file::{self, Settings},
     stat_sums::{self, StatSumsError},
@@ -348,9 +349,9 @@ impl DataBase {
         day: u8,
         new_entry: DataEntry,
     ) -> Result<()> {
-        let datetime = DataBase::parse_datetime(year, month, day, new_entry.hour)?;
-        let filepath = self.get_data_file_path(datetime)?;
-        let mut datafile = DataFile::open_data_file(&filepath)?;
+        let datetime = self.parse_compensated_datetime(year, month, day, new_entry.hour)?;
+        let date_path = self.get_date_file_path(datetime)?;
+        let mut datafile = DataFile::open_data_file(&date_path)?;
         let prev_entry = datafile.overwrite_entry(new_entry.clone());
         datafile.save()?;
 
@@ -385,9 +386,9 @@ impl DataBase {
         day: u8,
         new_entry: DataEntry,
     ) -> Result<()> {
-        let datetime = DataBase::parse_datetime(year, month, day, new_entry.hour)?;
-        let filepath = self.get_data_file_path(datetime)?;
-        let mut datafile = DataFile::open_data_file(&filepath)?;
+        let datetime = self.parse_compensated_datetime(year, month, day, new_entry.hour)?;
+        let date_path = self.get_date_file_path(datetime)?;
+        let mut datafile = DataFile::open_data_file(&date_path)?;
         datafile.add_entry(new_entry.clone())?;
         datafile.save()?;
 
@@ -437,6 +438,37 @@ impl DataBase {
         Ok(())
     }
 
+    pub fn add_diary_entry(&self, title: String, text: String) -> Result<()> {
+        /*
+        let diary_entry = DiaryEntry::new(title, text);
+        let datetime =
+            *diary_entry.timestamp() + Duration::hours(self.settings.day_switch_offset as i64);
+        let date_path = self.get_date_file_path(datetime)?; */
+        todo!();
+    }
+
+    pub fn remove_diary_entry(
+        &self,
+        year: i32,
+        month: u8,
+        day: u8,
+        diary_entry_index: usize,
+    ) -> Result<()> {
+        todo!();
+    }
+
+    // TODO: Low priority. Add empty c_wrapper function to allow C# side to begin preparing.
+    pub fn replace_diary_entry(
+        &self,
+        year: i32,
+        month: u8,
+        day: u8,
+        diary_entry_index: usize,
+        new_entry: DataEntry,
+    ) -> Result<()> {
+        todo!();
+    }
+
     pub fn parse_datetime(year: i32, month: u8, day: u8, hour: u8) -> Result<PrimitiveDateTime> {
         let month =
             time::Month::try_from(month).map_err(|_| Error::with_kind(ErrorKind::InvalidDate))?;
@@ -449,15 +481,25 @@ impl DataBase {
         Ok(PrimitiveDateTime::new(date, time))
     }
 
-    pub fn get_data_file_path(&self, mut datetime: PrimitiveDateTime) -> Result<PathBuf> {
+    pub fn parse_compensated_datetime(
+        &self,
+        year: i32,
+        month: u8,
+        day: u8,
+        hour: u8,
+    ) -> Result<PrimitiveDateTime> {
+        let raw = DataBase::parse_datetime(year, month, day, hour)?;
+        Ok(raw + Duration::hours(self.settings.day_switch_offset as i64))
+    }
+
+    pub fn get_date_file_path(&self, mut datetime: PrimitiveDateTime) -> Result<PathBuf> {
         datetime -= Duration::hours(self.settings().day_switch_offset as i64);
         let date = datetime.date();
 
         let filename = format!(
-            "{}-{}.{}",
+            "{}-{}",
             date.day(),
             date.weekday().number_days_from_monday(),
-            DATAFILEEXTENSION
         );
 
         let data_file_path = self.path.data().join(Path::new(&format!(

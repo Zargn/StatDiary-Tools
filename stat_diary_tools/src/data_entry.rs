@@ -65,8 +65,9 @@ fn read_at_index(bytes: &[u8], index: usize) -> Result<&u8, Error> {
 
 impl DataFile {
     /// Reads all entries in the provided file and returns a list of assembled DataEntry structs
-    pub fn read_from_file(file_path: &Path) -> Result<DataFile, Error> {
-        let bytes: Vec<u8> = io::BufReader::new(File::open(file_path)?)
+    pub fn read_from_file(date_path: &Path) -> Result<DataFile, Error> {
+        let file_path = date_path.with_extension(DATAFILEEXTENSION);
+        let bytes: Vec<u8> = io::BufReader::new(File::open(&file_path)?)
             .bytes()
             .map_while(Result::ok)
             .collect();
@@ -104,7 +105,8 @@ impl DataFile {
         })
     }
 
-    pub fn open_data_file(file_path: &Path) -> Result<DataFile, Error> {
+    pub fn open_data_file(date_path: &Path) -> Result<DataFile, Error> {
+        let file_path = date_path.with_extension(DATAFILEEXTENSION);
         let Some(file_dir) = file_path.parent() else {
             log::warn!(
                 "DataFile::open_data_file(): {:?}.parent() was None!",
@@ -115,12 +117,12 @@ impl DataFile {
         fs::create_dir_all(file_dir)?;
 
         if file_path.exists() {
-            return DataFile::read_from_file(file_path);
+            return DataFile::read_from_file(&file_path);
         }
 
         let datafile = DataFile {
             entries: HashMap::new(),
-            file_path: file_path.to_path_buf(),
+            file_path,
         };
 
         Ok(datafile)
@@ -276,7 +278,9 @@ impl DataEntry {
                 return Err(Error::InvalidData);
             }
             data[0] as u8
-        };*/
+        };
+        */
+
         let m_score = Self::validate_score(data[0])?;
         let p_score = Self::validate_score(data[1])?;
 
