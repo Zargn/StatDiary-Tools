@@ -50,7 +50,7 @@ impl log::Log for DBLogger {
                 record.level(),
                 record.args()
             ))?; // */
-            //println!("[time]: {} - {}", record.level(), record.args());
+            println!("[time]: {} - {}", record.level(), record.args());
         }
     }
 
