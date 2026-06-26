@@ -15,12 +15,12 @@ use crate::{
     data_entry::{self, DataEntry, DataFile},
     db_path::{DataBasePath, DataBasePathError},
     db_status::{ActiveTask, DBStatus, DBStatusError},
-    diary_file::{DiaryEntry, DiaryFile},
+    diary_file::{self, DiaryEntry, DiaryFile},
     logger::DBLogger,
     settings_file::{self, Settings},
     stat_sums::{self, StatSumsError},
     tags::{TagList, TagsError},
-    update_database, DATAFILEEXTENSION,
+    update_database, DATAFILEEXTENSION, DIARYFILEEXTENSION,
 };
 
 pub struct DataBase {
@@ -438,13 +438,31 @@ impl DataBase {
         Ok(())
     }
 
+    /// Creates a diary entry with the provided `title` and `text`.
+    /// The diary entry is marked with the current system time when this function is called.
+    ///
+    /// The location is selected using the current system time together with the database
+    /// day_switch_offset.
     pub fn add_diary_entry(&self, title: String, text: String) -> Result<()> {
-        /*
-        let diary_entry = DiaryEntry::new(title, text);
-        let datetime =
-            *diary_entry.timestamp() + Duration::hours(self.settings.day_switch_offset as i64);
-        let date_path = self.get_date_file_path(datetime)?; */
-        todo!();
+        let timestamp = match OffsetDateTime::now_local() {
+            Ok(datetime) => datetime,
+            Err(_) => {
+                log::warn!("DiaryEntry::new(): Could not determine time offset. Diary entry will be saved with UTC time.");
+                OffsetDateTime::now_utc()
+            }
+        };
+        let datetime = timestamp + Duration::hours(self.settings.day_switch_offset as i64);
+        let mut diary_path = self.get_date_file_path(datetime)?;
+        diary_path.add_extension(DIARYFILEEXTENSION);
+
+        let diary_entry = DiaryEntry::new(title, text, timestamp);
+
+        let mut diary_file = DiaryFile::open(&diary_path)?;
+
+        diary_file.add_entry(diary_entry);
+        diary_file.save()?;
+
+        Ok(())
     }
 
     pub fn remove_diary_entry(
@@ -496,6 +514,8 @@ impl DataBase {
         Ok(raw + Duration::hours(self.settings.day_switch_offset as i64))
     }
 
+    /// Returns a date file path for the provided OffsetDateTime in the following format:
+    /// year/month_number/day-weekday_nr
     pub fn get_date_file_path(&self, mut datetime: OffsetDateTime) -> Result<PathBuf> {
         datetime -= Duration::hours(self.settings().day_switch_offset as i64);
         let date = datetime.date();
@@ -675,6 +695,12 @@ pub enum ErrorKind {
     CorruptedSettingsFile,
     /// The provided day_switch_offset is outside of the acceptable -12 to 12 range.
     OffsetOutOfRange,
+    /// The provided path does not point to a diary file!
+    NotADiaryFile,
+    /// The diary file at the provided path was corrupted!
+    CorruptedDiaryFile,
+    /// No diary entry exists at the provided index! The index was out of range.
+    EntryIndexDoesNotExist,
 }
 
 impl ErrorKind {
@@ -706,6 +732,9 @@ impl ErrorKind {
     /// * `20` => `MissingSettingsFile`
     /// * `21` => `CorruptedSettingsFile`
     /// * `22` => `OffsetOutOfRange`
+    /// * `23` => `NotADiaryFile`
+    /// * `24` => `CorruptedDiaryFile`
+    /// * `25` => `EntryIndexDoesNotExist`
     pub fn code(&self) -> i32 {
         match self {
             ErrorKind::Io(_) => 1,
@@ -730,6 +759,9 @@ impl ErrorKind {
             ErrorKind::MissingSettingsFile => 20,
             ErrorKind::CorruptedSettingsFile => 21,
             ErrorKind::OffsetOutOfRange => 22,
+            ErrorKind::NotADiaryFile => 23,
+            ErrorKind::CorruptedDiaryFile => 24,
+            ErrorKind::EntryIndexDoesNotExist => 25,
         }
     }
 }
@@ -838,6 +870,19 @@ impl From<settings_file::Error> for Error {
                 settings_file::Error::Io(e) => ErrorKind::Io(e),
                 settings_file::Error::DoesNotExist => ErrorKind::MissingSettingsFile,
                 settings_file::Error::IsCorrupted => ErrorKind::CorruptedSettingsFile,
+            },
+        }
+    }
+}
+
+impl From<diary_file::Error> for Error {
+    fn from(value: diary_file::Error) -> Self {
+        Self {
+            kind: match value {
+                diary_file::Error::Io(e) => ErrorKind::Io(e),
+                diary_file::Error::NotADiaryFile => ErrorKind::NotADiaryFile,
+                diary_file::Error::CorruptedDiaryFile => ErrorKind::CorruptedDiaryFile,
+                diary_file::Error::EntryIndexDoesNotExist => ErrorKind::EntryIndexDoesNotExist,
             },
         }
     }

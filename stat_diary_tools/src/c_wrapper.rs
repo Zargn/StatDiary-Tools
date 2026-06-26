@@ -633,6 +633,58 @@ pub unsafe extern "C" fn RemoveTag(db_path_ptr: *const c_char, tag_id: u16) -> i
 
 //
 
+/// fn AddDiaryEntry(`db_path_ptr`, `title_ptr`, `text_ptr`);
+///
+/// Creates a diary entry with the title `title_ptr` and text `text_ptr`.
+/// The location and timestamp is automatically set based on the current system time.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn AddDiaryEntry(
+    db_path_ptr: *const c_char,
+    title_ptr: *const c_char,
+    text_ptr: *const c_char,
+) -> i32 {
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+    let Ok(title) = try_ptr_to_string(title_ptr) else {
+        return -2;
+    };
+    let Ok(text) = try_ptr_to_string(text_ptr) else {
+        return -3;
+    };
+
+    let result_code = match data_base.add_diary_entry(title.to_string(), text.to_string()) {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("AddDiaryEntry error occured: {error:?}");
+            error.code()
+        }
+    };
+
+    log::logger().flush();
+    result_code
+}
+
+//
+
+//
+
 /// Attempts to create a rust `String` using the provided `ptr`.
 ///
 /// # Safety

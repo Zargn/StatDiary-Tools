@@ -1,11 +1,11 @@
 use std::{
     fmt::Display,
-    fs::File,
-    io::{self, Read},
+    fs::{self, File},
+    io::{self, BufWriter, Read, Write},
     path::{Path, PathBuf},
 };
 
-use time::{OffsetDateTime, PrimitiveDateTime};
+use time::OffsetDateTime;
 
 use crate::{DIARYFILEEXTENSION, TIMEFORMAT};
 
@@ -22,7 +22,8 @@ impl From<io::Error> for Error {
     }
 }
 
-const ENTRYSEPARATOR: &str = "----------------------------------------------------\n";
+const ENTRYSEPARATOR: &str = "\n\nTHIS IS A SEPARATOR! DO NOT WRITE THE SAME LINES MANUALLY!
+----------------------------------------------------\n";
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -66,6 +67,11 @@ impl DiaryFile {
             log::error!("DiaryFile::open(): {file_path:?} does not point to a diary file!");
             Err(Error::NotADiaryFile)
         } else {
+            let Some(file_dir) = file_path.parent() else {
+                log::warn!("DiaryFile::open(): {:?}.parent() was None!", file_path);
+                return Err(Error::NotADiaryFile);
+            };
+            fs::create_dir_all(file_dir)?;
             Ok(DiaryFile {
                 entries: Vec::new(),
                 file_path: file_path.to_path_buf(),
@@ -96,7 +102,26 @@ impl DiaryFile {
 
     pub fn save(&mut self) -> Result<()> {
         self.sort_entries();
-        todo!();
+
+        let mut tmp_path = self.file_path.clone();
+        tmp_path.add_extension("tmp");
+
+        let mut writer = BufWriter::new(File::create(&tmp_path)?);
+
+        let s = self
+            .entries
+            .iter()
+            .flat_map(|s| [s.to_string(), ENTRYSEPARATOR.to_string()])
+            .take(self.entries.iter().len() * 2 - 1)
+            .collect::<String>();
+
+        write!(writer, "{}", s)?;
+
+        writer.flush()?;
+
+        fs::rename(tmp_path, &self.file_path)?;
+
+        Ok(())
     }
 
     pub fn sort_entries(&mut self) {
@@ -113,15 +138,7 @@ pub struct DiaryEntry {
 }
 
 impl DiaryEntry {
-    pub fn new(title: String, text: String) -> DiaryEntry {
-        let timestamp = match OffsetDateTime::now_local() {
-            Ok(datetime) => datetime,
-            Err(_) => {
-                log::warn!("DiaryEntry::new(): Could not determine time offset. Diary entry will be saved with UTC time.");
-                OffsetDateTime::now_utc()
-            }
-        };
-
+    pub fn new(title: String, text: String, timestamp: OffsetDateTime) -> DiaryEntry {
         DiaryEntry {
             timestamp,
             title,
@@ -130,16 +147,26 @@ impl DiaryEntry {
     }
 
     pub fn from_block(text_block: &str) -> Result<DiaryEntry> {
-        let mut text_block_parts = text_block.splitn(2, '\n');
+        let mut text_block_parts = text_block.splitn(2, "\n\n");
+        /*
+        println!("{:?}", text_block_parts);
+        let t = text_block_parts.next().unwrap();
+        println!("t: {t}");
+        println!("{:?}", text_block_parts); // */
         let mut time_and_title_line = text_block_parts
             .next()
-            .ok_or(Error::CorruptedDiaryFile)?
+            .expect("The first element always exists.")
+            //.ok_or(Error::CorruptedDiaryFile)?
             .split(TIMETITLESEPARATOR);
-        let timestamp = OffsetDateTime::parse(
-            time_and_title_line.next().expect("The first always exist."),
-            &TIMEFORMAT,
-        )
-        .map_err(|_| Error::CorruptedDiaryFile)?;
+        let time_block = time_and_title_line
+            .next()
+            .expect("The first element always exists.");
+        let Ok(timestamp) = OffsetDateTime::parse(time_block, &TIMEFORMAT) else {
+            log::error!(
+                "DiaryEntry::from_block(): Could not parse timestamp from block: [{time_block}]"
+            );
+            return Err(Error::CorruptedDiaryFile);
+        };
         let title = time_and_title_line.next().unwrap_or_default();
         let text = text_block_parts.next().ok_or(Error::CorruptedDiaryFile)?;
 
@@ -149,18 +176,19 @@ impl DiaryEntry {
             text: text.to_string(),
         })
     }
-
-    pub fn timestamp(&self) -> &OffsetDateTime {
-        &self.timestamp
-    }
 }
 
 impl Display for DiaryEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}{}{}\n\n{}\n",
-            self.timestamp, TIMETITLESEPARATOR, self.title, self.text
+            "{}{}{}\n\n{}",
+            self.timestamp
+                .format(TIMEFORMAT)
+                .expect("This should never fail"),
+            TIMETITLESEPARATOR,
+            self.title,
+            self.text
         )
     }
 }
