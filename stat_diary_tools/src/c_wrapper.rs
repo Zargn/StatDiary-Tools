@@ -685,6 +685,193 @@ pub unsafe extern "C" fn AddDiaryEntry(
 
 //
 
+/// fn InsertDiaryEntry(
+///     `db_path_ptr`,
+///     `year`,
+///     `month`,
+///     `day`,
+///     `hour`,
+///     `minute`
+///     `title_ptr`,
+///     `text_ptr`);
+///
+/// Creates a diary entry with the provided title and text at the location matching
+/// the provided date. The timestamp is also set based on the provided date and time.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn InsertDiaryEntry(
+    db_path_ptr: *const c_char,
+    year: i32,
+    month: u8,
+    day: u8,
+    hour: u8,
+    minute: u8,
+    title_ptr: *const c_char,
+    text_ptr: *const c_char,
+) -> i32 {
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+    let Ok(title) = try_ptr_to_string(title_ptr) else {
+        return -2;
+    };
+    let Ok(text) = try_ptr_to_string(text_ptr) else {
+        return -3;
+    };
+
+    /*
+    let result_code = match data_base.NOTIMPLEMENTED {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("InsertDiaryEntry error occured: {error:?}");
+            error.code()
+        }
+    }; */
+
+    let result_code = -99;
+    log::error!("InsertDiaryEntry is not yet implemented!");
+    log::logger().flush();
+    result_code
+}
+
+//
+
+//
+
+/// fn OverwriteDiaryEntry(
+///     `db_path_ptr`,
+///     `diary_index`,
+///     `year`,
+///     `month`,
+///     `day`,
+///     `title_ptr`,
+///     `text_ptr`);
+///
+/// Replaces the title and text of the diary entry at `diary_index` with the new provided title
+/// and text. The timestamp of the diary entry being overwritten is preserved.
+/// Will return an error if no diary entry exists at the provided date and index.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn OverwriteDiaryEntry(
+    db_path_ptr: *const c_char,
+    diary_index: u32,
+    year: i32,
+    month: u8,
+    day: u8,
+    title_ptr: *const c_char,
+    text_ptr: *const c_char,
+) -> i32 {
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+    let Ok(title) = try_ptr_to_string(title_ptr) else {
+        return -2;
+    };
+    let Ok(text) = try_ptr_to_string(text_ptr) else {
+        return -3;
+    };
+
+    /*
+    let result_code = match data_base.NOTIMPLEMENTED {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("OverwriteDiaryEntry error occured: {error:?}");
+            error.code()
+        }
+    }; */
+
+    let result_code = -99;
+    log::error!("OverwriteDiaryEntry is not yet implemented!");
+    log::logger().flush();
+    result_code
+}
+
+//
+
+//
+
+/// fn RemoveDiaryEntry(
+///     `db_path_ptr`,
+///     `year`,
+///     `month`,
+///     `day`,
+///     `diary_index`);
+///
+/// Removes the diary entry at the provided `diary_index` in the diary file for the provided date.
+/// Returns an error if no entry exists at said index and date.
+///
+/// # Safety
+///
+/// Any parameter mentioning `ptr` must satisfy the requirements of `CStr::from_ptr`:
+///
+/// * The memory pointed to by `ptr` must contain a valid nul terminator at the
+///   end of the string.
+///
+/// * `ptr` must be [valid] for reads of bytes up to and including the nul terminator.
+///   This means in particular:
+///
+///     * The entire memory range of this `CStr` must be contained within a single allocation!
+///     * `ptr` must be non-null even for a zero-length cstr.
+///
+/// * The nul terminator must be within `isize::MAX` from `ptr`
+#[no_mangle]
+pub unsafe extern "C" fn RemoveDiaryEntry(
+    db_path_ptr: *const c_char,
+    year: i32,
+    month: u8,
+    day: u8,
+    diary_index: u32,
+) -> i32 {
+    let data_base = match try_get_db(db_path_ptr) {
+        Ok(db) => db,
+        Err(ec) => return ec,
+    };
+
+    /*
+    let result_code = match data_base.NOTIMPLEMENTED {
+        Ok(_) => 0,
+        Err(error) => {
+            log::error!("RemoveDiaryEntry error occured: {error:?}");
+            error.code()
+        }
+    };*/
+
+    let result_code = -99;
+    log::error!("RemoveDiaryEntry is not yet implemented!");
+    log::logger().flush();
+    result_code
+}
+
 /// Attempts to create a rust `String` using the provided `ptr`.
 ///
 /// # Safety
