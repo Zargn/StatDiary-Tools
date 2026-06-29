@@ -18,8 +18,8 @@ mod update_database;
 const DATAFILEEXTENSION: &str = "statdiary";
 const DIARYFILEEXTENSION: &str = "diary";
 const TIMEFORMAT: StaticFormatDescription = format_description!(
-    "[year]-[month]-[day] [offset_hour \
-         sign:mandatory]h [hour]:[minute]:[second]"
+    "[year]-[month]-[day] TimeZone:([offset_hour \
+         sign:mandatory]h) [hour]:[minute]:[second]"
 );
 
 /*

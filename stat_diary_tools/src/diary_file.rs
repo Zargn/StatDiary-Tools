@@ -22,8 +22,9 @@ impl From<io::Error> for Error {
     }
 }
 
-const ENTRYSEPARATOR: &str = "\n\nTHIS IS A SEPARATOR! DO NOT WRITE THE SAME LINES MANUALLY!
-----------------------------------------------------\n";
+const ENTRYSEPARATOR: &str = "
+----------------------------------------------------
+";
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -148,15 +149,9 @@ impl DiaryEntry {
 
     pub fn from_block(text_block: &str) -> Result<DiaryEntry> {
         let mut text_block_parts = text_block.splitn(2, "\n\n");
-        /*
-        println!("{:?}", text_block_parts);
-        let t = text_block_parts.next().unwrap();
-        println!("t: {t}");
-        println!("{:?}", text_block_parts); // */
         let mut time_and_title_line = text_block_parts
             .next()
             .expect("The first element always exists.")
-            //.ok_or(Error::CorruptedDiaryFile)?
             .split(TIMETITLESEPARATOR);
         let time_block = time_and_title_line
             .next()
@@ -167,8 +162,14 @@ impl DiaryEntry {
             );
             return Err(Error::CorruptedDiaryFile);
         };
+
         let title = time_and_title_line.next().unwrap_or_default();
-        let text = text_block_parts.next().ok_or(Error::CorruptedDiaryFile)?;
+        let Some(text) = text_block_parts.next() else {
+            log::error!(
+                "DiaryEntry::from_block(): Missing text component of block: [{text_block}]!"
+            );
+            return Err(Error::CorruptedDiaryFile);
+        };
 
         Ok(DiaryEntry {
             timestamp,
