@@ -33,7 +33,22 @@ pub fn init_logger() -> Result<(), SetLoggerError> {
 
 // TODO:
 //
-// Add Diary Entry function
+// Move file path logic to its own file.
+//      Currently data file paths are used by more than one system.
+//      It would be benefitial to move the logic for creating filepaths based on dates to its
+//      own file. It could also be placed in db_path.rs
+//
+// Have time and date related code in its own file.
+//      Time and dates are used in multiple places, and sometimes require the use of the day
+//      switch offset.
+//      This might not be needed depending on the results from moving the file path logic.
+//      So make sure to think it over before doing anything with this.
+//
+// Move code files into different folders.
+//      Currently all code files are placed directly in /src. This is fine when the number of
+//      files is low, but now the number is getting a bit to high. Moving some of the files to
+//      folders would help make it more organized.
+//
 // Insert Diary Entry function
 //
 // Adjust day_switch_offset function
