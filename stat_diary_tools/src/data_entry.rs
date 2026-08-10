@@ -8,7 +8,9 @@ use std::{
 
 use log::warn;
 
-use crate::{settings_file::Settings, DATAFILEEXTENSION, DIARYFILEEXTENSION};
+use crate::{
+    cache_handling::Overview, settings_file::Settings, DATAFILEEXTENSION, DIARYFILEEXTENSION,
+};
 
 /*
 #[derive(Debug)]
@@ -237,6 +239,23 @@ impl DataFile {
         fs::rename(tmp_path, &self.file_path)?;
 
         Ok(())
+    }
+
+    //
+
+    //
+
+    pub fn get_overview(&self) -> Overview {
+        let mut overview = Overview::default();
+        for data in self.entries().values() {
+            overview.m_score.add(data.mental_score);
+            overview.p_score.add(data.physical_score);
+
+            for tag in &data.tags {
+                overview.tags.insert(*tag);
+            }
+        }
+        overview
     }
 }
 

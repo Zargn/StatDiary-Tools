@@ -543,6 +543,10 @@ impl DataBase {
     pub fn database_path(&self) -> &Path {
         self.path.root()
     }
+
+    pub fn path(&self) -> &DataBasePath {
+        &self.path
+    }
 }
 
 //

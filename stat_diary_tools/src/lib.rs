@@ -1,5 +1,6 @@
 use time::{format_description::StaticFormatDescription, macros::format_description};
 
+pub mod analytics;
 mod backup;
 pub mod c_wrapper;
 mod cache_handling;
@@ -32,6 +33,9 @@ pub fn init_logger() -> Result<(), SetLoggerError> {
 //
 
 // TODO:
+//
+// Create "create database" method.
+//      Right now we don't have any way to create a new database. Which is less than ideal.
 //
 // Move file path logic to its own file.
 //      Currently data file paths are used by more than one system.

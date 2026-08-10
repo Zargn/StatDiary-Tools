@@ -15,11 +15,11 @@ use crate::{data_entry::DataFile, db_path::DataBasePath, utilities::read_sorted_
 //
 
 #[derive(Debug, Clone)]
-struct ScoreAvg {
+pub struct ScoreAvg {
     min: u8,
     max: u8,
-    total: u16,
-    count: u16,
+    total: u32,
+    count: u32,
 }
 
 impl Default for ScoreAvg {
@@ -34,16 +34,16 @@ impl Default for ScoreAvg {
 }
 
 impl ScoreAvg {
-    fn add(&mut self, score: u8) {
+    pub fn add(&mut self, score: u8) {
         self.min = self.min.min(score);
         self.max = self.max.max(score);
-        self.total += score as u16;
+        self.total += score as u32;
         self.count += 1;
     }
-    fn avg(&self) -> f32 {
+    pub fn avg(&self) -> f32 {
         self.total as f32 / self.count as f32
     }
-    fn merge(&mut self, other: &ScoreAvg) {
+    pub fn merge(&mut self, other: &ScoreAvg) {
         self.min = self.min.min(other.min);
         self.max = self.max.max(other.max);
         self.total += other.total;
@@ -52,10 +52,10 @@ impl ScoreAvg {
 }
 
 #[derive(Debug, Default, Clone)]
-struct Overview {
-    m_score: ScoreAvg,
-    p_score: ScoreAvg,
-    tags: HashSet<u16>,
+pub struct Overview {
+    pub m_score: ScoreAvg,
+    pub p_score: ScoreAvg,
+    pub tags: HashSet<u16>,
 }
 
 impl Overview {
@@ -202,7 +202,8 @@ fn create_month_cache(month_folder: &Path) -> Result<Overview, io::Error> {
             }
         }
 
-        month_overview.merge(&overview);
+        //month_overview.merge(&overview); // */
+        month_overview.merge(&data_file.get_overview());
 
         writeln!(
             result_writer,
