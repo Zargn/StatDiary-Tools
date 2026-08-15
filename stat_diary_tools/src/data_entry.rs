@@ -284,7 +284,8 @@ impl DataEntry {
 
     pub fn from_c_data(data: &[u16], hour: u8, db_settings: &Settings) -> Result<DataEntry, Error> {
         if data.len() < 2 {
-            log::error!("DataEntry::from_c_data(): Data array was too short! Len was {} when 3 is mandatory!", data.len())
+            log::error!("DataEntry::from_c_data(): Data array was too short! Len was {} when 2 is mandatory!", data.len());
+            return Err(Error::InvalidData);
         }
 
         /*
