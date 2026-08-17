@@ -16,10 +16,10 @@ use crate::{data_entry::DataFile, db_path::DataBasePath, utilities::read_sorted_
 
 #[derive(Debug, Clone)]
 pub struct ScoreAvg {
-    min: u8,
-    max: u8,
-    total: u32,
-    count: u32,
+    pub min: u8,
+    pub max: u8,
+    pub total: u32,
+    pub count: u32,
 }
 
 impl Default for ScoreAvg {

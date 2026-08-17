@@ -42,7 +42,7 @@ impl From<walkdir::Error> for StatSumsError {
 
 /// Contains a list of tag ids and the number of times each tag id has been added to this instance.
 #[derive(Debug, Default)]
-struct Tags {
+pub struct Tags {
     tags: HashMap<u16, u32>,
 }
 
@@ -59,6 +59,14 @@ impl Tags {
             None => {
                 log::warn!("Attempted to remove 1 instance of tag [tag_id] from the StatSumFile, but there was nothing to remove!")
             }
+        }
+    }
+
+    pub fn get_occurances(&self, tag_id: u16) -> u32 {
+        if let Some(occurances) = self.tags.get(&tag_id) {
+            *occurances
+        } else {
+            0
         }
     }
 
@@ -130,6 +138,10 @@ impl StatSumFile {
             self.tags.remove(*tag_id);
         }
         self
+    }
+
+    pub fn tags(&self) -> &Tags {
+        &self.tags
     }
 
     pub fn save(&mut self) -> Result<(), StatSumsError> {
