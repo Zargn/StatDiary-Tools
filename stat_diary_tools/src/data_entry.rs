@@ -257,6 +257,16 @@ impl DataFile {
         }
         overview
     }
+
+    //
+
+    //
+
+    /*
+    /// Returns the date component of the data file pa
+    pub fn get_day(&self) -> (u8, u8) {
+        todo!();
+    }*/
 }
 
 //
@@ -306,7 +316,7 @@ impl DataEntry {
 
         let mut tags = Vec::new();
 
-        for tag in data.iter().skip(3) {
+        for tag in data.iter().skip(2) {
             tags.push(*tag);
         }
 
